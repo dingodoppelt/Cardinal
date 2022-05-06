@@ -209,3 +209,6 @@
 [submodule "plugins/myth-modules"]
 	path = plugins/myth-modules
 	url = https://github.com/Ahineya/vcv-myth-plugin.git
+[submodule "plugins/NB"]
+	path = plugins/NB
+	url = git@github.com:dingodoppelt/NB.git
