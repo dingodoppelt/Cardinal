@@ -52,7 +52,11 @@
 # include <unistd.h>
 #endif
 
-const std::string CARDINAL_VERSION = "22.06";
+#ifdef DISTRHO_OS_WASM
+# include <emscripten/emscripten.h>
+#endif
+
+const std::string CARDINAL_VERSION = "22.07";
 
 namespace rack {
 
@@ -62,7 +66,7 @@ int rateLimit = 0;
 
 bool isStandalone()
 {
-    return std::strstr(getPluginFormatName(), "JACK") != nullptr;
+    return std::strstr(getPluginFormatName(), "Standalone") != nullptr;
 }
 
 #ifdef ARCH_WIN
@@ -94,6 +98,10 @@ std::string getSpecialPath(const SpecialPath type)
 
     return {};
 }
+#endif
+
+#ifdef DISTRHO_OS_WASM
+char* patchStorageSlug = nullptr;
 #endif
 
 std::string homeDir()
@@ -143,8 +151,8 @@ void loadDialog()
         DISTRHO_SAFE_ASSERT_RETURN(ui != nullptr,);
 
         DISTRHO_NAMESPACE::FileBrowserOptions opts;
-        opts.startDir = dir.c_str();
         opts.saving = ui->saving = false;
+        opts.startDir = dir.c_str();
         opts.title = "Open patch";
         ui->openFileBrowser(opts);
     });
@@ -173,7 +181,7 @@ void loadSelectionDialog()
     std::string selectionDir = asset::user("selections");
     system::createDirectories(selectionDir);
 
-    async_dialog_filebrowser(false, selectionDir.c_str(), "Import selection", [w](char* pathC) {
+    async_dialog_filebrowser(false, nullptr, selectionDir.c_str(), "Import selection", [w](char* pathC) {
         if (!pathC) {
             // No path selected
             return;
@@ -246,8 +254,9 @@ static void saveAsDialog(const bool uncompressed)
     DISTRHO_SAFE_ASSERT_RETURN(ui != nullptr,);
 
     DISTRHO_NAMESPACE::FileBrowserOptions opts;
-    opts.startDir = dir.c_str();
     opts.saving = ui->saving = true;
+    opts.defaultName = "patch.vcv";
+    opts.startDir = dir.c_str();
     opts.title = "Save patch";
     ui->savingUncompressed = uncompressed;
     ui->openFileBrowser(opts);
@@ -268,9 +277,21 @@ void saveAsDialogUncompressed()
 #endif
 }
 
+void openBrowser(const std::string& url)
+{
+#ifdef DISTRHO_OS_WASM
+    EM_ASM({
+        window.open(UTF8ToString($0), '_blank');
+    }, url.c_str());
+#else
+    system::openBrowser(url);
+#endif
+}
+
 }
 
 void async_dialog_filebrowser(const bool saving,
+                              const char* const defaultName,
                               const char* const startDir,
                               const char* const title,
                               const std::function<void(char* path)> action)
@@ -287,6 +308,7 @@ void async_dialog_filebrowser(const bool saving,
 
     DISTRHO_NAMESPACE::FileBrowserOptions opts;
     opts.saving = saving;
+    opts.defaultName = defaultName;
     opts.startDir = startDir;
     opts.title = title;
 

@@ -20,7 +20,6 @@ endif
 ifneq ($(STATIC_BUILD),true)
 
 CWD = ../../carla/source
-STATIC_PLUGIN_TARGET = true
 include $(CWD)/Makefile.deps.mk
 
 CARLA_BUILD_DIR = ../../carla/build
@@ -35,7 +34,9 @@ CARLA_EXTRA_LIBS += $(CARLA_BUILD_DIR)/modules/$(CARLA_BUILD_TYPE)/carla_engine_
 CARLA_EXTRA_LIBS += $(CARLA_BUILD_DIR)/modules/$(CARLA_BUILD_TYPE)/carla_plugin.a
 CARLA_EXTRA_LIBS += $(CARLA_BUILD_DIR)/modules/$(CARLA_BUILD_TYPE)/native-plugins.a
 CARLA_EXTRA_LIBS += $(CARLA_BUILD_DIR)/modules/$(CARLA_BUILD_TYPE)/audio_decoder.a
+ifneq ($(WASM),true)
 CARLA_EXTRA_LIBS += $(CARLA_BUILD_DIR)/modules/$(CARLA_BUILD_TYPE)/jackbridge.min.a
+endif
 CARLA_EXTRA_LIBS += $(CARLA_BUILD_DIR)/modules/$(CARLA_BUILD_TYPE)/lilv.a
 CARLA_EXTRA_LIBS += $(CARLA_BUILD_DIR)/modules/$(CARLA_BUILD_TYPE)/rtmempool.a
 CARLA_EXTRA_LIBS += $(CARLA_BUILD_DIR)/modules/$(CARLA_BUILD_TYPE)/sfzero.a
@@ -53,6 +54,7 @@ DGL_NAMESPACE = CardinalDGL
 NVG_DISABLE_SKIPPING_WHITESPACE = true
 NVG_FONT_TEXTURE_FLAGS = NVG_IMAGE_NEAREST
 USE_NANOVG_FBO = true
+WASM_EXCEPTIONS = true
 include ../../dpf/Makefile.base.mk
 
 # --------------------------------------------------------------
@@ -113,13 +115,22 @@ endif
 
 # --------------------------------------------------------------
 
+# FIXME
+ifeq ($(WASM),true)
+STATIC_CARLA_PLUGIN_LIBS = -lsndfile -lopus -lFLAC -lvorbisenc -lvorbis -logg -lm
+endif
+
 EXTRA_DEPENDENCIES = $(RACK_EXTRA_LIBS) $(CARLA_EXTRA_LIBS)
 EXTRA_LIBS = $(RACK_EXTRA_LIBS) $(CARLA_EXTRA_LIBS) $(STATIC_CARLA_PLUGIN_LIBS)
 
-ifeq ($(shell pkg-config --exists fftw3f && echo true),true)
+ifeq ($(shell $(PKG_CONFIG) --exists fftw3f && echo true),true)
 EXTRA_DEPENDENCIES += ../../deps/aubio/libaubio.a
 EXTRA_LIBS += ../../deps/aubio/libaubio.a
 EXTRA_LIBS += $(shell $(PKG_CONFIG) --libs fftw3f)
+endif
+
+ifeq ($(WASM),true)
+EXTRA_DEPENDENCIES += wasm_resources
 endif
 
 # --------------------------------------------------------------
@@ -143,11 +154,11 @@ BASE_FLAGS += -DPRIVATE=
 BASE_FLAGS += -I..
 BASE_FLAGS += -I../../dpf/dgl/src/nanovg
 BASE_FLAGS += -I../../include
-BASE_FLAGS += -I../../include/neon-compat
+BASE_FLAGS += -I../../include/simd-compat
 BASE_FLAGS += -I../Rack/include
 ifeq ($(SYSDEPS),true)
 BASE_FLAGS += -DCARDINAL_SYSDEPS
-BASE_FLAGS += $(shell pkg-config --cflags jansson libarchive samplerate speexdsp)
+BASE_FLAGS += $(shell $(PKG_CONFIG) --cflags jansson libarchive samplerate speexdsp)
 else
 BASE_FLAGS += -DZSTDLIB_VISIBILITY=
 BASE_FLAGS += -I../Rack/dep/include
@@ -164,11 +175,10 @@ ifeq ($(MOD_BUILD),true)
 BASE_FLAGS += -DDISTRHO_PLUGIN_USES_MODGUI=1 -DDISTRHO_PLUGIN_MINIMUM_BUFFER_SIZE=0xffff
 endif
 
-ifeq ($(WASM),true)
-BASE_FLAGS += -DNANOVG_GLES2=1
-BASE_FLAGS += -msse -msse2 -msse3 -msimd128
-else ifneq ($(HAIKU),true)
+ifneq ($(WASM),true)
+ifneq ($(HAIKU),true)
 BASE_FLAGS += -pthread
+endif
 endif
 
 ifeq ($(WINDOWS),true)
@@ -176,6 +186,12 @@ BASE_FLAGS += -D_USE_MATH_DEFINES
 BASE_FLAGS += -DWIN32_LEAN_AND_MEAN
 BASE_FLAGS += -I../../include/mingw-compat
 BASE_FLAGS += -I../../include/mingw-std-threads
+endif
+
+ifeq ($(USE_GLES2),true)
+BASE_FLAGS += -DNANOVG_GLES2_FORCED
+else ifeq ($(USE_GLES3),true)
+BASE_FLAGS += -DNANOVG_GLES3_FORCED
 endif
 
 BUILD_C_FLAGS += -std=gnu11
@@ -198,7 +214,15 @@ BASE_FLAGS += -Wno-unused-variable
 # --------------------------------------------------------------
 # extra linker flags
 
-ifeq ($(HAIKU),true)
+ifeq ($(WASM),true)
+LINK_FLAGS += --preload-file=./jsfx
+LINK_FLAGS += --preload-file=./lv2
+LINK_FLAGS += --preload-file=./resources
+LINK_FLAGS += -sALLOW_MEMORY_GROWTH
+LINK_FLAGS += -sINITIAL_MEMORY=64Mb
+LINK_FLAGS += -sLZ4=1
+LINK_FLAGS += --shell-file=../emscripten/shell.html
+else ifeq ($(HAIKU),true)
 LINK_FLAGS += -lpthread
 else
 LINK_FLAGS += -pthread
@@ -226,7 +250,7 @@ EXTRA_LIBS += -lws2_32 -lwinmm
 endif
 
 ifeq ($(SYSDEPS),true)
-EXTRA_LIBS += $(shell pkg-config --libs jansson libarchive samplerate speexdsp)
+EXTRA_LIBS += $(shell $(PKG_CONFIG) --libs jansson libarchive samplerate speexdsp)
 endif
 
 ifeq ($(WITH_LTO),true)
@@ -278,7 +302,7 @@ else
 all: lv2 vst3
 endif # STATIC_BUILD
 else
-all: lv2 vst2 vst3 static
+all: lv2 vst2 vst3
 endif
 
 CORE_RESOURCES  = patches
@@ -296,9 +320,9 @@ LV2_RESOURCES += $(TARGET_DIR)/$(NAME).lv2/modgui/documentation.pdf
 LV2_RESOURCES += $(TARGET_DIR)/$(NAME).lv2/modgui
 endif
 
-# Cardinal main variant should not use rtaudio fallback (it has CV ports)
+# Cardinal main variant should not use rtaudio/sdl2 fallback (it has CV ports)
 ifeq ($(CARDINAL_VARIANT),main)
-jack: BUILD_CXX_FLAGS += -DDPF_JACK_STANDALONE_SKIP_RTAUDIO_FALLBACK
+jack: BUILD_CXX_FLAGS += -DDPF_JACK_STANDALONE_SKIP_RTAUDIO_FALLBACK -DDPF_JACK_STANDALONE_SKIP_SDL2_FALLBACK
 endif
 
 # Cardinal main variant is not available as VST2 due to lack of CV ports
@@ -313,6 +337,17 @@ endif
 lv2: $(LV2_RESOURCES)
 vst2: $(VST2_RESOURCES)
 vst3: $(VST3_RESOURCES)
+
+# --------------------------------------------------------------
+# Extra rules for wasm resources
+
+wasm_resources: $(CURDIR)/lv2 $(CURDIR)/resources
+
+$(CURDIR)/lv2: $(LV2_RESOURCES)
+	$(shell wget https://falktx.com/data/wasm-things-2022-08-15.tar.gz && tar xf wasm-things-2022-08-15.tar.gz)
+
+$(CURDIR)/resources: $(LV2_RESOURCES)
+	cp -rL $(TARGET_DIR)/$(NAME).lv2/resources $(CURDIR)/resources
 
 # --------------------------------------------------------------
 # Extra rules for Windows icon
@@ -341,6 +376,10 @@ $(TARGET_DIR)/%/template-fx.vcv: ../template-fx.vcv
 	$(SILENT)ln -sf $(abspath $<) $@
 
 $(TARGET_DIR)/%/template-synth.vcv: ../template-synth.vcv
+	-@mkdir -p "$(shell dirname $@)"
+	$(SILENT)ln -sf $(abspath $<) $@
+
+$(TARGET_DIR)/%/template-wasm.vcv: ../template-wasm.vcv
 	-@mkdir -p "$(shell dirname $@)"
 	$(SILENT)ln -sf $(abspath $<) $@
 

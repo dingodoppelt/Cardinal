@@ -894,7 +894,6 @@ static void initStatic__Cardinal()
         p->addModel(modelCardinalBlank);
         p->addModel(modelExpanderInputMIDI);
         p->addModel(modelExpanderOutputMIDI);
-        p->addModel(modelGlBars);
         p->addModel(modelHostAudio2);
         p->addModel(modelHostAudio8);
         p->addModel(modelHostCV);
@@ -906,14 +905,22 @@ static void initStatic__Cardinal()
         p->addModel(modelHostParametersMap);
         p->addModel(modelHostTime);
         p->addModel(modelTextEditor);
+       #ifndef DGL_USE_GLES
+        p->addModel(modelGlBars);
+       #else
+        spl.removeModule("glBars");
+       #endif
        #ifndef STATIC_BUILD
         p->addModel(modelAudioFile);
-        p->addModel(modelCarla);
         p->addModel(modelIldaeil);
        #else
         spl.removeModule("AudioFile");
-        spl.removeModule("Carla");
         spl.removeModule("Ildaeil");
+       #endif
+       #if !(defined(DISTRHO_OS_WASM) || defined(STATIC_BUILD))
+        p->addModel(modelCarla);
+       #else
+        spl.removeModule("Carla");
        #endif
        #ifndef HEADLESS
         p->addModel(modelSassyScope);

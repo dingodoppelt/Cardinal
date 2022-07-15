@@ -25,6 +25,10 @@
 # define REMOTE_HOST_PORT "2228"
 #endif
 
+#ifdef DISTRHO_OS_WASM
+# define CARDINAL_IMPORTED_TEMPLATE_FILENAME "/imported.vcv"
+#endif
+
 extern const std::string CARDINAL_VERSION;
 
 namespace rack {
@@ -53,6 +57,10 @@ enum SpecialPath {
 std::string getSpecialPath(SpecialPath type);
 #endif
 
+#ifdef DISTRHO_OS_WASM
+extern char* patchStorageSlug;
+#endif
+
 } // namespace rack
 
 namespace patchUtils {
@@ -66,6 +74,7 @@ void saveDialog(const std::string& path);
 void saveAsDialog();
 void saveAsDialogUncompressed();
 void appendSelectionContextMenu(rack::ui::Menu* menu);
+void openBrowser(const std::string& url);
 
 bool connectToRemote();
 bool isRemoteConnected();

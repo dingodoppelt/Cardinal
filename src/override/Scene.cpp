@@ -299,11 +299,13 @@ void Scene::onHoverKey(const HoverKeyEvent& e) {
 			patchUtils::revertDialog();
 			e.consume(this);
 		}
+#ifndef DISTRHO_OS_WASM
 		if (e.keyName == "s" && (e.mods & RACK_MOD_MASK) == RACK_MOD_CTRL) {
 			// NOTE: will do nothing if path is empty, intentionally
 			patchUtils::saveDialog(APP->patch->path);
 			e.consume(this);
 		}
+#endif
 		if (e.keyName == "s" && (e.mods & RACK_MOD_MASK) == (RACK_MOD_CTRL | GLFW_MOD_SHIFT)) {
 			patchUtils::saveAsDialog();
 			e.consume(this);
@@ -342,7 +344,7 @@ void Scene::onHoverKey(const HoverKeyEvent& e) {
 			e.consume(this);
 		}
 		if (e.key == GLFW_KEY_F1 && (e.mods & RACK_MOD_MASK) == 0) {
-			system::openBrowser("https://vcvrack.com/manual/");
+			patchUtils::openBrowser("https://vcvrack.com/manual/");
 			e.consume(this);
 		}
 		if (e.key == GLFW_KEY_F3 && (e.mods & RACK_MOD_MASK) == 0) {
@@ -358,6 +360,12 @@ void Scene::onHoverKey(const HoverKeyEvent& e) {
 			window::generateScreenshot();
 			e.consume(this);
 		}
+#ifdef DISTRHO_OS_WASM
+		if (e.key == GLFW_KEY_F11 && (e.mods & RACK_MOD_MASK) == 0) {
+			APP->window->setFullScreen(!APP->window->isFullScreen());
+			e.consume(this);
+		}
+#endif
 
 		// Module selections
 		if (e.keyName == "a" && (e.mods & RACK_MOD_MASK) == RACK_MOD_CTRL) {

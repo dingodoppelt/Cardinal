@@ -10,6 +10,7 @@
 DISTRHO_NAMESPACE = CardinalDISTRHO
 DGL_NAMESPACE = CardinalDGL
 USE_NANOVG_FBO = true
+WASM_EXCEPTIONS = true
 include ../dpf/Makefile.base.mk
 
 # --------------------------------------------------------------
@@ -35,14 +36,16 @@ BASE_FLAGS += -DARCH_LIN
 endif
 
 ifeq ($(HAIKU),true)
-BASE_FLAGS += -I../include/haiku-compat
+BASE_FLAGS += -I../include/linux-compat
+else ifeq ($(WASM),true)
+BASE_FLAGS += -I../include/linux-compat
 endif
 
 BASE_FLAGS += -DPRIVATE=
 BASE_FLAGS += -I../dpf/dgl/src/nanovg
 BASE_FLAGS += -I../dpf/distrho
 BASE_FLAGS += -I../include
-BASE_FLAGS += -I../include/neon-compat
+BASE_FLAGS += -I../include/simd-compat
 BASE_FLAGS += -IRack/include
 ifeq ($(SYSDEPS),true)
 BASE_FLAGS += -DCARDINAL_SYSDEPS
@@ -61,6 +64,10 @@ BASE_FLAGS += -IRack/dep/pffft
 
 ifeq ($(DEBUG),true)
 BASE_FLAGS += -UDEBUG
+ifeq ($(WASM),true)
+# SSE must always be enabled on wasm, even in debug builds
+BASE_FLAGS += -msse -msse2 -msse3 -msimd128
+endif
 endif
 
 ifeq ($(HAVE_LIBLO),true)
@@ -79,13 +86,10 @@ ifeq ($(HAIKU),true)
 BASE_FLAGS += -DCLOCK_MONOTONIC_RAW=CLOCK_MONOTONIC
 endif
 
-ifeq ($(WASM),true)
-BASE_FLAGS += -DNANOVG_GLES2=1
-BASE_FLAGS += -msse -msse2 -msse3 -msimd128
-# FIXME
-BASE_FLAGS += -DRTLD_DEEPBIND=0
-else ifneq ($(HAIKU),true)
+ifneq ($(WASM),true)
+ifneq ($(HAIKU),true)
 BASE_FLAGS += -pthread
+endif
 endif
 
 ifeq ($(WINDOWS),true)
@@ -93,6 +97,12 @@ BASE_FLAGS += -D_USE_MATH_DEFINES
 BASE_FLAGS += -DWIN32_LEAN_AND_MEAN
 BASE_FLAGS += -I../include/mingw-compat
 BASE_FLAGS += -I../include/mingw-std-threads
+endif
+
+ifeq ($(USE_GLES2),true)
+BASE_FLAGS += -DNANOVG_GLES2_FORCED
+else ifeq ($(USE_GLES3),true)
+BASE_FLAGS += -DNANOVG_GLES3_FORCED
 endif
 
 BUILD_C_FLAGS += -std=gnu11
@@ -126,6 +136,7 @@ RACK_FILES += override/plugin.cpp
 RACK_FILES += override/Engine.cpp
 RACK_FILES += override/MenuBar.cpp
 RACK_FILES += override/Model.cpp
+RACK_FILES += override/OpenGlWidget.cpp
 RACK_FILES += override/Scene.cpp
 
 RACK_FILES += Rack/dep/pffft/pffft.c
@@ -154,6 +165,7 @@ IGNORED_FILES += Rack/src/app/TipWindow.cpp
 IGNORED_FILES += Rack/src/dsp/minblep.cpp
 IGNORED_FILES += Rack/src/engine/Engine.cpp
 IGNORED_FILES += Rack/src/plugin/Model.cpp
+IGNORED_FILES += Rack/src/widget/OpenGlWidget.cpp
 IGNORED_FILES += Rack/src/window/Window.cpp
 IGNORED_FILES += $(wildcard Rack/src/core/*.cpp)
 
@@ -161,6 +173,10 @@ RACK_FILES += $(wildcard Rack/src/*.c)
 RACK_FILES += $(wildcard Rack/src/*/*.c)
 RACK_FILES += $(filter-out $(IGNORED_FILES),$(wildcard Rack/src/*.cpp))
 RACK_FILES += $(filter-out $(IGNORED_FILES), $(wildcard Rack/src/*/*.cpp))
+
+ifeq ($(WASM),true)
+RACK_FILES += emscripten/WasmUtils.cpp
+endif
 
 # --------------------------------------------------------------
 # lots of warnings from VCV side
@@ -188,6 +204,8 @@ all: $(TARGET)
 ifeq ($(MOD_BUILD),true)
 	$(MAKE) -C Cardinal lv2
 	$(MAKE) -C CardinalFX lv2
+else ifeq ($(WASM),true)
+	$(MAKE) -C CardinalFX jack
 else
 	$(MAKE) -C Cardinal
 	$(MAKE) -C CardinalFX $(CARDINAL_FX_ARGS)
@@ -237,6 +255,8 @@ $(BUILD_DIR)/%.cpp.o: %.cpp
 	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
 	@echo "Compiling $<"
 	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -c -o $@
+
+$(BUILD_DIR)/emscripten/WasmUtils.cpp.o: BUILD_CXX_FLAGS += -fno-exceptions
 
 # --------------------------------------------------------------
 

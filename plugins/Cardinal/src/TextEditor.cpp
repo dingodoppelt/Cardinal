@@ -19,7 +19,6 @@
 
 #ifndef HEADLESS
 # include "ImGuiTextEditor.hpp"
-# include "extra/FileBrowserDialog.hpp"
 #endif
 
 #include <fstream>
@@ -236,7 +235,7 @@ struct TextEditorLoadFileItem : MenuItem {
         TextEditorModule* const module = this->module;;
         WeakPtr<ImGuiTextEditor> widget = this->widget;
 
-        async_dialog_filebrowser(false, nullptr, text.c_str(), [module, widget](char* path)
+        async_dialog_filebrowser(false, nullptr, nullptr, text.c_str(), [module, widget](char* path)
         {
             if (path)
             {

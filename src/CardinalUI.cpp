@@ -30,6 +30,15 @@
 #include <ui/MenuSeparator.hpp>
 #include <window/Window.hpp>
 
+#ifdef DISTRHO_OS_WASM
+# include <ui/Button.hpp>
+# include <ui/Label.hpp>
+# include <ui/MenuOverlay.hpp>
+# include <ui/SequentialLayout.hpp>
+# include "CardinalCommon.hpp"
+# include <emscripten/emscripten.h>
+#endif
+
 #ifdef NDEBUG
 # undef DEBUG
 #endif
@@ -88,13 +97,208 @@ void handleHostParameterDrag(const CardinalPluginContext* pcontext, uint index, 
 
 // -----------------------------------------------------------------------------------------------------------
 
+#ifdef DISTRHO_OS_WASM
+struct WasmWelcomeDialog : rack::widget::OpaqueWidget
+{
+    static const constexpr float margin = 10;
+    static const constexpr float buttonWidth = 110;
+
+    WasmWelcomeDialog()
+    {
+        using rack::ui::Button;
+        using rack::ui::Label;
+        using rack::ui::MenuOverlay;
+        using rack::ui::SequentialLayout;
+
+        box.size = rack::math::Vec(550, 310);
+
+        SequentialLayout* const layout = new SequentialLayout;
+        layout->box.pos = rack::math::Vec(0, 0);
+        layout->box.size = box.size;
+        layout->orientation = SequentialLayout::VERTICAL_ORIENTATION;
+        layout->margin = rack::math::Vec(margin, margin);
+        layout->spacing = rack::math::Vec(margin, margin);
+        layout->wrap = false;
+        addChild(layout);
+
+        SequentialLayout* const contentLayout = new SequentialLayout;
+        contentLayout->spacing = rack::math::Vec(margin, margin);
+        layout->addChild(contentLayout);
+
+        SequentialLayout* const buttonLayout = new SequentialLayout;
+        buttonLayout->alignment = SequentialLayout::CENTER_ALIGNMENT;
+        buttonLayout->box.size = box.size;
+        buttonLayout->spacing = rack::math::Vec(margin, margin);
+        layout->addChild(buttonLayout);
+
+        Label* const label = new Label;
+        label->box.size.x = box.size.x - 2*margin;
+        label->box.size.y = box.size.y - 2*margin - 40;
+        label->fontSize = 20;
+        label->text = ""
+            "Welcome!\n"
+            "\n"
+            "This is a special web-assembly version of Cardinal, "
+            "allowing you to enjoy eurorack-style modules directly in your browser.\n"
+            "\n"
+            "This is still very much a work in progress, "
+            "minor issues and occasional crashes are expected.\n"
+            "\n"
+            "Proceed with caution and have fun!";
+        contentLayout->addChild(label);
+
+        struct JoinDiscussionButton : Button {
+            WasmWelcomeDialog* dialog;
+            void onAction(const ActionEvent& e) override {
+                patchUtils::openBrowser("https://github.com/DISTRHO/Cardinal/issues/287");
+                dialog->getParent()->requestDelete();
+            }
+        };
+        JoinDiscussionButton* const discussionButton = new JoinDiscussionButton;
+        discussionButton->box.size.x = buttonWidth;
+        discussionButton->text = "Join discussion";
+        discussionButton->dialog = this;
+        buttonLayout->addChild(discussionButton);
+
+        struct DismissButton : Button {
+            WasmWelcomeDialog* dialog;
+            void onAction(const ActionEvent& e) override {
+                dialog->getParent()->requestDelete();
+            }
+        };
+        DismissButton* const dismissButton = new DismissButton;
+        dismissButton->box.size.x = buttonWidth;
+        dismissButton->text = "Dismiss";
+        dismissButton->dialog = this;
+        buttonLayout->addChild(dismissButton);
+
+        MenuOverlay* const overlay = new MenuOverlay;
+        overlay->bgColor = nvgRGBAf(0, 0, 0, 0.33);
+        overlay->addChild(this);
+        APP->scene->addChild(overlay);
+    }
+
+    void step() override
+    {
+        OpaqueWidget::step();
+        box.pos = parent->box.size.minus(box.size).div(2).round();
+    }
+
+    void draw(const DrawArgs& args) override
+    {
+        bndMenuBackground(args.vg, 0.0, 0.0, box.size.x, box.size.y, 0);
+        Widget::draw(args);
+    }
+};
+
+struct WasmPatchStorageLoadingDialog : rack::widget::OpaqueWidget
+{
+    static const constexpr float margin = 10;
+
+    rack::ui::MenuOverlay* overlay;
+
+    WasmPatchStorageLoadingDialog()
+    {
+        using rack::ui::Label;
+        using rack::ui::MenuOverlay;
+        using rack::ui::SequentialLayout;
+
+        box.size = rack::math::Vec(300, 50);
+
+        SequentialLayout* const layout = new SequentialLayout;
+        layout->box.pos = rack::math::Vec(0, 0);
+        layout->box.size = box.size;
+        layout->orientation = SequentialLayout::VERTICAL_ORIENTATION;
+        layout->margin = rack::math::Vec(margin, margin);
+        layout->spacing = rack::math::Vec(margin, margin);
+        layout->wrap = false;
+        addChild(layout);
+
+        Label* const label = new Label;
+        label->box.size.x = box.size.x - 2*margin;
+        label->box.size.y = box.size.y - 2*margin - 40;
+        label->fontSize = 16;
+        label->text = "Load patch from PatchStorage...\n";
+        layout->addChild(label);
+
+        overlay = new MenuOverlay;
+        overlay->bgColor = nvgRGBAf(0, 0, 0, 0.33);
+        overlay->addChild(this);
+        APP->scene->addChild(overlay);
+    }
+
+    void step() override
+    {
+        OpaqueWidget::step();
+        box.pos = parent->box.size.minus(box.size).div(2).round();
+    }
+
+    void draw(const DrawArgs& args) override
+    {
+        bndMenuBackground(args.vg, 0.0, 0.0, box.size.x, box.size.y, 0);
+        Widget::draw(args);
+    }
+};
+
+static void downloadPatchStorageFailed(const char* const filename)
+{
+    d_stdout("downloadPatchStorageFailed %s", filename);
+    CardinalPluginContext* const context = static_cast<CardinalPluginContext*>(APP);
+    CardinalBaseUI* const ui = static_cast<CardinalBaseUI*>(context->ui);
+
+    if (ui->psDialog != nullptr)
+    {
+        ui->psDialog->overlay->requestDelete();
+        asyncDialog::create("Failed to fetch patch from PatchStorage");
+    }
+
+    using namespace rack;
+    context->patch->templatePath = system::join(asset::systemDir, "template-synth.vcv"); // FIXME
+    context->patch->loadTemplate();
+    context->scene->rackScroll->reset();
+}
+
+static void downloadPatchStorageSucceeded(const char* const filename)
+{
+    d_stdout("downloadPatchStorageSucceeded %s | %s", filename, APP->patch->templatePath.c_str());
+    CardinalPluginContext* const context = static_cast<CardinalPluginContext*>(APP);
+    CardinalBaseUI* const ui = static_cast<CardinalBaseUI*>(context->ui);
+
+    ui->psDialog->overlay->requestDelete();
+    ui->psDialog = nullptr;
+
+    if (FILE* f = fopen(filename, "r"))
+    {
+        uint8_t buf[8] = {};
+        fread(buf, 8, 1, f);
+        d_stdout("read patch %x %x %x %x %x %x %x %x",
+                buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],buf[6],buf[7]);
+        fclose(f);
+    }
+
+    try {
+        context->patch->load(CARDINAL_IMPORTED_TEMPLATE_FILENAME);
+    } catch (rack::Exception& e) {
+        const std::string message = rack::string::f("Could not load patch: %s", e.what());
+        asyncDialog::create(message.c_str());
+        return;
+    }
+
+    context->scene->rackScroll->reset();
+    context->patch->path = "";
+    context->history->setSaved();
+}
+#endif
+
+// -----------------------------------------------------------------------------------------------------------
+
 class CardinalUI : public CardinalBaseUI,
                    public WindowParametersCallback
 {
     rack::math::Vec lastMousePos;
     WindowParameters windowParameters;
     int rateLimitStep = 0;
-    int8_t counterForSelfFocus = 0;
+    int8_t counterForFirstIdlePoint = 0;
 
     struct ScopedContext {
         CardinalPluginContext* const context;
@@ -182,6 +386,13 @@ public:
             }
         }
 
+       #ifdef DISTRHO_OS_WASM
+        if (rack::patchStorageSlug != nullptr)
+            psDialog = new WasmPatchStorageLoadingDialog();
+        else
+            new WasmWelcomeDialog();
+       #endif
+
         context->window->step();
 
         rack::contextSet(nullptr);
@@ -217,10 +428,22 @@ public:
 
     void uiIdle() override
     {
-        if (counterForSelfFocus >= 0 && ++counterForSelfFocus == 5)
+        if (counterForFirstIdlePoint >= 0 && ++counterForFirstIdlePoint == 5)
         {
-            counterForSelfFocus = -1;
-            getWindow().focus();
+            counterForFirstIdlePoint = -1;
+
+           #ifdef DISTRHO_OS_WASM
+            if (rack::patchStorageSlug != nullptr)
+            {
+                std::string url("/patchstorage.php?slug=");
+                url += rack::patchStorageSlug;
+                std::free(rack::patchStorageSlug);
+                rack::patchStorageSlug = nullptr;
+
+                emscripten_async_wget(url.c_str(), context->patch->templatePath.c_str(),
+                                    downloadPatchStorageSucceeded, downloadPatchStorageFailed);
+            }
+           #endif
         }
 
         if (filebrowserhandle != nullptr && fileBrowserIdle(filebrowserhandle))
@@ -309,6 +532,9 @@ public:
             break;
         case kWindowParameterInvertZoom:
             windowParameters.invertZoom = value > 0.5f;
+            break;
+        case kWindowParameterSqueezeModulePositions:
+            windowParameters.squeezeModules = value > 0.5f;
             break;
         default:
             return;
@@ -406,6 +632,9 @@ protected:
         case kWindowParameterInvertZoom:
             windowParameters.invertZoom = value > 0.5f;
             break;
+        case kWindowParameterSqueezeModulePositions:
+            windowParameters.squeezeModules = value > 0.5f;
+            break;
         default:
             return;
         }
@@ -460,6 +689,9 @@ protected:
 
     bool onMouse(const MouseEvent& ev) override
     {
+        if (ev.press)
+            getWindow().focus();
+
         const int action = ev.press ? GLFW_PRESS : GLFW_RELEASE;
         int mods = glfwMods(ev.mod);
 
@@ -620,14 +852,9 @@ protected:
         setState("windowSize", sizeString);
     }
 
-    void uiFocus(const bool focus, const CrossingMode mode) override
+    void uiFocus(const bool focus, CrossingMode) override
     {
-        if (focus)
-        {
-            if (mode == kCrossingNormal)
-                getWindow().focus();
-        }
-        else
+        if (!focus)
         {
             const ScopedContext sc(this, 0);
             context->event->handleLeave();

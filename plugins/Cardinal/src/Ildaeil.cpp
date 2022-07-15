@@ -31,9 +31,9 @@
 #ifndef HEADLESS
 # include "ImGuiWidget.hpp"
 # include "ModuleWidgets.hpp"
-# include "extra/FileBrowserDialog.hpp"
+# include "extra/Mutex.hpp"
+# include "extra/Runner.hpp"
 # include "extra/ScopedPointer.hpp"
-# include "extra/Thread.hpp"
 # include "../../src/extra/SharedResourcePointer.hpp"
 #else
 # include "extra/Mutex.hpp"
@@ -121,6 +121,8 @@ static const char* getPathForJSFX()
     {
        #if defined(CARLA_OS_MAC)
         path = homeDir() + "/Library/Application Support/REAPER/Effects";
+       #elif defined(CARLA_OS_WASM)
+        path = "/jsfx";
        #elif defined(CARLA_OS_WIN)
         path = getSpecialPath(kSpecialPathAppData) + "\\REAPER\\Effects";
         if (! system::exists(path))
@@ -253,6 +255,9 @@ struct IldaeilModule : Module {
             carla_set_engine_option(fCarlaHostHandle, ENGINE_OPTION_PATH_BINARIES, 0, "/Applications/Carla.app/Contents/MacOS");
             carla_set_engine_option(fCarlaHostHandle, ENGINE_OPTION_PATH_RESOURCES, 0, "/Applications/Carla.app/Contents/MacOS/resources");
         }
+#elif defined(CARLA_OS_WASM)
+        if (true)
+        {}
 #elif defined(CARLA_OS_WIN)
         const std::string winBinaryDir = system::join(asset::systemDir, "Carla");
 
@@ -570,11 +575,6 @@ static void host_ui_custom_data_changed(NativeHostHandle handle, const char* key
     d_stdout("%s %p %s %s", __FUNCTION__, handle, key, value);
 }
 
-static void host_ui_closed(NativeHostHandle handle)
-{
-    d_stdout("%s %p", __FUNCTION__, handle);
-}
-
 static const char* host_ui_save_file(NativeHostHandle, bool, const char*, const char*)
 {
     return nullptr;
@@ -589,7 +589,7 @@ static intptr_t host_dispatcher(const NativeHostHandle handle, const NativeHostD
 // --------------------------------------------------------------------------------------------------------------------
 
 #ifndef HEADLESS
-struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
+struct IldaeilWidget : ImGuiWidget, IdleCallback, Runner {
     static constexpr const uint kButtonHeight = 20;
 
     struct PluginInfoCache {
@@ -663,6 +663,7 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
         kIdleLoadSelectedPlugin,
         kIdlePluginLoadedFromDSP,
         kIdleResetPlugin,
+        kIdleOpenFileUI,
         kIdleShowCustomUI,
         kIdleHidePluginUI,
         kIdleGiveIdleToUI,
@@ -670,12 +671,30 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
         kIdleNothing
     } fIdleState = kIdleInit;
 
+    struct RunnerData {
+        bool needsReinit = true;
+        uint pluginCount = 0;
+        uint pluginIndex = 0;
+
+        void init()
+        {
+            needsReinit = true;
+            pluginCount = 0;
+            pluginIndex = 0;
+        }
+    } fRunnerData;
+
+   #ifdef CARLA_OS_WASM
+    PluginType fPluginType = PLUGIN_JSFX;
+   #else
     PluginType fPluginType = PLUGIN_LV2;
+   #endif
     PluginType fNextPluginType = fPluginType;
     uint fPluginCount = 0;
     int fPluginSelected = -1;
     bool fPluginScanningFinished = false;
     bool fPluginHasCustomUI = false;
+    bool fPluginHasFileOpen = false;
     bool fPluginHasOutputParameters = false;
     bool fPluginRunning = false;
     bool fPluginWillRunInBridgeMode = false;
@@ -687,8 +706,6 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
     char fPluginSearchString[0xff] = {};
 
     String fPopupError;
-
-    FileBrowserHandle fileBrowserHandle = nullptr;
 
     bool idleCallbackActive = false;
     IldaeilModule* const module;
@@ -726,12 +743,7 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
         if (module != nullptr && module->fCarlaHostHandle != nullptr)
         {
             if (idleCallbackActive)
-            {
                 module->pcontext->removeIdleCallback(this);
-
-                if (fileBrowserHandle != nullptr)
-                    fileBrowserClose(fileBrowserHandle);
-            }
 
             if (fPluginRunning)
                 carla_show_custom_ui(module->fCarlaHostHandle, 0, false);
@@ -741,8 +753,7 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
             module->fUI = nullptr;
         }
 
-        if (isThreadRunning())
-            stopThread(-1);
+        stopRunner();
 
         fPluginGenericUI = nullptr;
 
@@ -753,16 +764,28 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
     {
         const CarlaHostHandle handle = module->fCarlaHostHandle;
 
-        if (carla_get_current_plugin_count(handle) != 0)
+        if (carla_get_current_plugin_count(handle) == 0)
+            return false;
+
+        const uint hints = carla_get_plugin_info(handle, 0)->hints;
+        updatePluginFlags(hints);
+
+        fPluginRunning = true;
+        return true;
+    }
+
+    void updatePluginFlags(const uint hints) noexcept
+    {
+        if (hints & PLUGIN_HAS_CUSTOM_UI_USING_FILE_OPEN)
         {
-            const uint hints = carla_get_plugin_info(handle, 0)->hints;
-
-            fPluginRunning = true;
-            fPluginHasCustomUI = hints & PLUGIN_HAS_CUSTOM_UI;
-            return true;
+            fPluginHasCustomUI = false;
+            fPluginHasFileOpen = true;
         }
-
-        return false;
+        else
+        {
+            fPluginHasCustomUI = hints & PLUGIN_HAS_CUSTOM_UI;
+            fPluginHasFileOpen = false;
+        }
     }
 
     void projectLoadedFromDSP()
@@ -792,17 +815,26 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
         setDirty(true);
     }
 
+    void closeUI() noexcept
+    {
+        if (fIdleState == kIdleGiveIdleToUI)
+            fIdleState = kIdleNothing;
+    }
+
     void openFileFromDSP(bool /* isDir */, const char* const title, const char* /* filter */)
     {
         DISTRHO_SAFE_ASSERT_RETURN(idleCallbackActive,);
         DISTRHO_SAFE_ASSERT_RETURN(fPluginType == PLUGIN_INTERNAL || fPluginType == PLUGIN_LV2,);
 
-        const CardinalPluginContext* const pcontext = module->pcontext;
+        const CarlaHostHandle handle = module->fCarlaHostHandle;
+        async_dialog_filebrowser(false, nullptr, nullptr, title, [handle](char* path)
+        {
+            if (path == nullptr)
+                return;
 
-        // FIXME isEmbed
-        FileBrowserOptions opts;
-        opts.title = title;
-        fileBrowserHandle = fileBrowserCreate(true, pcontext->nativeWindowId, pcontext->window->pixelRatio, opts);
+            carla_set_custom_data(handle, 0, CUSTOM_DATA_TYPE_PATH, "file", path);
+            std::free(path);
+        });
     }
 
     void createOrUpdatePluginGenericUI(const CarlaHostHandle handle)
@@ -810,7 +842,8 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
         const CarlaPluginInfo* const info = carla_get_plugin_info(handle, 0);
 
         fDrawingState = kDrawingPluginGenericUI;
-        fPluginHasCustomUI = info->hints & PLUGIN_HAS_CUSTOM_UI;
+        updatePluginFlags(info->hints);
+
         if (fPluginGenericUI == nullptr)
             createPluginGenericUI(handle, info);
         else
@@ -1008,12 +1041,6 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
             {
                 idleCallbackActive = false;
                 pcontext->removeIdleCallback(this);
-
-                if (fileBrowserHandle != nullptr)
-                {
-                    fileBrowserClose(fileBrowserHandle);
-                    fileBrowserHandle = nullptr;
-                }
             }
         }
     }
@@ -1027,15 +1054,6 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
         carla_juce_idle();
         */
 
-        if (fileBrowserHandle != nullptr && fileBrowserIdle(fileBrowserHandle))
-        {
-            if (const char* const path = fileBrowserGetPath(fileBrowserHandle))
-                carla_set_custom_data(handle, 0, CUSTOM_DATA_TYPE_PATH, "file", path);
-
-            fileBrowserClose(fileBrowserHandle);
-            fileBrowserHandle = nullptr;
-        }
-
         if (fDrawingState == kDrawingPluginGenericUI && fPluginGenericUI != nullptr && fPluginHasOutputParameters)
         {
             updatePluginGenericUI(handle);
@@ -1046,18 +1064,20 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
         {
         case kIdleInit:
             fIdleState = kIdleNothing;
-            startThread();
+            initAndStartRunner();
             break;
 
         case kIdleInitPluginAlreadyLoaded:
             fIdleState = kIdleNothing;
             createOrUpdatePluginGenericUI(handle);
-            startThread();
+            initAndStartRunner();
             break;
 
         case kIdlePluginLoadedFromDSP:
             fIdleState = kIdleNothing;
             createOrUpdatePluginGenericUI(handle);
+            if (fRunnerData.needsReinit)
+                initAndStartRunner();
             break;
 
         case kIdleLoadSelectedPlugin:
@@ -1068,6 +1088,11 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
         case kIdleResetPlugin:
             fIdleState = kIdleNothing;
             loadPlugin(handle, carla_get_plugin_info(handle, 0)->label);
+            break;
+
+        case kIdleOpenFileUI:
+            fIdleState = kIdleNothing;
+            carla_show_custom_ui(handle, 0, true);
             break;
 
         case kIdleShowCustomUI:
@@ -1081,16 +1106,16 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
             break;
 
         case kIdleGiveIdleToUI:
-            module->fCarlaPluginDescriptor->ui_idle(module->fCarlaPluginHandle);
+            if (module->fCarlaPluginDescriptor->ui_idle != nullptr)
+                module->fCarlaPluginDescriptor->ui_idle(module->fCarlaPluginHandle);
             break;
 
         case kIdleChangePluginType:
             fIdleState = kIdleNothing;
             fPluginSelected = -1;
-            if (isThreadRunning())
-                stopThread(-1);
+            stopRunner();
             fPluginType = fNextPluginType;
-            startThread();
+            initAndStartRunner();
             break;
 
         case kIdleNothing:
@@ -1130,93 +1155,114 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
         loadPlugin(handle, label);
     }
 
-    void run() override
+    bool initAndStartRunner()
     {
-        const char* path;
-        switch (fPluginType)
+        if (isRunnerActive())
+            stopRunner();
+
+        fRunnerData.init();
+        return startRunner();
+    }
+
+    bool run() override
+    {
+        if (fRunnerData.needsReinit)
         {
-        case PLUGIN_LV2:
-            path = std::getenv("LV2_PATH");
-            break;
-        case PLUGIN_JSFX:
-            path = getPathForJSFX();
-            break;
-        default:
-            path = nullptr;
-            break;
-        }
+            fRunnerData.needsReinit = false;
 
-        if (path != nullptr)
-            carla_set_engine_option(module->fCarlaHostHandle, ENGINE_OPTION_PLUGIN_PATH, fPluginType, path);
+            const char* path;
+            switch (fPluginType)
+            {
+            case PLUGIN_LV2:
+                path = std::getenv("LV2_PATH");
+                break;
+            case PLUGIN_JSFX:
+                path = getPathForJSFX();
+                break;
+            default:
+                path = nullptr;
+                break;
+            }
 
-        fPluginCount = 0;
-        delete[] fPlugins;
+            fPluginCount = 0;
+            delete[] fPlugins;
 
-        uint count;
-
-        {
-            const MutexLocker cml(sPluginInfoLoadMutex);
-
-            d_stdout("Will scan plugins now...");
-            count = carla_get_cached_plugin_count(fPluginType, path);
-            d_stdout("Scanning found %u plugins", count);
-        }
-
-        if (fDrawingState == kDrawingLoading)
-        {
-            fDrawingState = kDrawingPluginList;
-            fPluginSearchFirstShow = true;
-        }
-
-        if (count != 0)
-        {
-            fPlugins = new PluginInfoCache[count];
-
-            for (uint i=0, j; i < count && ! shouldThreadExit(); ++i)
             {
                 const MutexLocker cml(sPluginInfoLoadMutex);
 
-                const CarlaCachedPluginInfo* const info = carla_get_cached_plugin_info(fPluginType, i);
-                DISTRHO_SAFE_ASSERT_CONTINUE(info != nullptr);
+                d_stdout("Will scan plugins now...");
+                fRunnerData.pluginCount = carla_get_cached_plugin_count(fPluginType, path);
+                d_stdout("Scanning found %u plugins", fRunnerData.pluginCount);
+            }
 
-                if (! info->valid)
-                    continue;
-                if (info->audioIns != 0 && info->audioIns != 2)
-                    continue;
-                if (info->midiIns != 0 && info->midiIns != 1)
-                    continue;
-                if (info->midiOuts != 0 && info->midiOuts != 1)
-                    continue;
+            if (fDrawingState == kDrawingLoading)
+            {
+                fDrawingState = kDrawingPluginList;
+                fPluginSearchFirstShow = true;
+            }
 
-                if (fPluginType == PLUGIN_INTERNAL)
-                {
-                    if (std::strcmp(info->label, "audiogain_s") == 0)
-                        continue;
-                    if (std::strcmp(info->label, "cv2audio") == 0)
-                        continue;
-                    if (std::strcmp(info->label, "lfo") == 0)
-                        continue;
-                    if (std::strcmp(info->label, "midi2cv") == 0)
-                        continue;
-                    if (std::strcmp(info->label, "midithrough") == 0)
-                        continue;
-                    if (std::strcmp(info->label, "3bandsplitter") == 0)
-                        continue;
-                }
-
-                j = fPluginCount;
-                fPlugins[j].name = strdup(info->name);
-                fPlugins[j].label = strdup(info->label);
-                ++fPluginCount;
+            if (fRunnerData.pluginCount != 0)
+            {
+                fPlugins = new PluginInfoCache[fRunnerData.pluginCount];
+                fPluginScanningFinished = false;
+                return true;
+            }
+            else
+            {
+                fPlugins = nullptr;
+                fPluginScanningFinished = true;
+                return false;
             }
         }
-        else
-        {
-            fPlugins = nullptr;
-        }
 
-        if (! shouldThreadExit())
-            fPluginScanningFinished = true;
+        const uint index = fRunnerData.pluginIndex++;
+        DISTRHO_SAFE_ASSERT_UINT2_RETURN(index < fRunnerData.pluginCount,
+                                         index, fRunnerData.pluginCount, false);
+
+        do {
+            const MutexLocker cml(sPluginInfoLoadMutex);
+
+            const CarlaCachedPluginInfo* const info = carla_get_cached_plugin_info(fPluginType, index);
+            DISTRHO_SAFE_ASSERT_CONTINUE(info != nullptr);
+
+            if (! info->valid)
+                break;
+            if (info->audioIns != 0 && info->audioIns != 2)
+                break;
+            if (info->midiIns != 0 && info->midiIns != 1)
+                break;
+            if (info->midiOuts != 0 && info->midiOuts != 1)
+                break;
+
+            if (fPluginType == PLUGIN_INTERNAL)
+            {
+                if (std::strcmp(info->label, "audiogain_s") == 0)
+                    break;
+                if (std::strcmp(info->label, "cv2audio") == 0)
+                    break;
+                if (std::strcmp(info->label, "lfo") == 0)
+                    break;
+                if (std::strcmp(info->label, "midi2cv") == 0)
+                    break;
+                if (std::strcmp(info->label, "midithrough") == 0)
+                    break;
+                if (std::strcmp(info->label, "3bandsplitter") == 0)
+                    break;
+            }
+
+            const uint pindex = fPluginCount;
+            fPlugins[pindex].name = strdup(info->name);
+            fPlugins[pindex].label = strdup(info->label);
+            ++fPluginCount;
+        } while (false);
+
+        // run again
+        if (fRunnerData.pluginIndex != fRunnerData.pluginCount)
+            return true;
+
+        // stop here
+        fPluginScanningFinished = true;
+        return false;
     }
 
     void drawImGui() override
@@ -1314,12 +1360,23 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
             if (ImGui::Button("Reset"))
                 fIdleState = kIdleResetPlugin;
 
-            if (fDrawingState == kDrawingPluginGenericUI && fPluginHasCustomUI)
+            if (fDrawingState == kDrawingPluginGenericUI)
             {
-                ImGui::SameLine();
+                if (fPluginHasCustomUI)
+                {
+                    ImGui::SameLine();
 
-                if (ImGui::Button("Show Custom GUI"))
-                    fIdleState = kIdleShowCustomUI;
+                    if (ImGui::Button("Show Custom GUI"))
+                        fIdleState = kIdleShowCustomUI;
+                }
+
+                if (fPluginHasFileOpen)
+                {
+                    ImGui::SameLine();
+
+                    if (ImGui::Button("Open File..."))
+                        fIdleState = kIdleOpenFileUI;
+                }
             }
         }
 
@@ -1510,11 +1567,13 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Thread {
             if (ImGui::Button("Load Plugin"))
                 fIdleState = kIdleLoadSelectedPlugin;
 
+           #ifndef CARLA_OS_WASM
             if (fPluginType != PLUGIN_INTERNAL && (module == nullptr || module->canUseBridges))
             {
                 ImGui::SameLine();
                 ImGui::Checkbox("Run in bridge mode", &fPluginWillRunInBridgeMode);
             }
+           #endif
 
             ImGui::EndDisabled();
 
@@ -1608,6 +1667,12 @@ static void host_ui_parameter_changed(const NativeHostHandle handle, const uint3
 {
     if (IldaeilWidget* const ui = static_cast<IldaeilWidget*>(static_cast<IldaeilModule*>(handle)->fUI))
         ui->changeParameterFromDSP(index, value);
+}
+
+static void host_ui_closed(const NativeHostHandle handle)
+{
+    if (IldaeilWidget* const ui = static_cast<IldaeilWidget*>(static_cast<IldaeilModule*>(handle)->fUI))
+        ui->closeUI();
 }
 
 static const char* host_ui_open_file(const NativeHostHandle handle,
@@ -1780,6 +1845,7 @@ struct IldaeilModuleWidget : ModuleWidgetWithSideScrews<26> {
 };
 #else
 static void host_ui_parameter_changed(NativeHostHandle, uint32_t, float) {}
+static void host_ui_closed(NativeHostHandle) {}
 static const char* host_ui_open_file(NativeHostHandle, bool, const char*, const char*) { return nullptr; }
 static void projectLoadedFromDSP(void*) {}
 struct IldaeilModuleWidget : ModuleWidget {

@@ -7,7 +7,7 @@
 # also set in:
 # src/CardinalCommon.cpp `CARDINAL_VERSION`
 # src/CardinalPlugin.cpp `getVersion`
-VERSION = 22.06
+VERSION = 22.07
 
 # --------------------------------------------------------------
 # Import base definitions
@@ -97,8 +97,7 @@ endif
 # --------------------------------------------------------------
 # Check for X11+OpenGL dependencies (unless headless build)
 
-ifneq ($(HAIKU_OR_MACOS_OR_WINDOWS),true)
-ifneq ($(WASM),true)
+ifneq ($(HAIKU_OR_MACOS_OR_WASM_OR_WINDOWS),true)
 ifneq ($(HEADLESS),true)
 
 ifneq ($(HAVE_OPENGL),true)
@@ -127,12 +126,11 @@ CARLA_EXTRA_ARGS += HAVE_XRANDR=false
 
 endif
 endif
-endif
 
 # --------------------------------------------------------------
 # Check for optional system-wide dependencies
 
-ifeq ($(shell pkg-config --exists fftw3f && echo true),true)
+ifeq ($(shell $(PKG_CONFIG) --exists fftw3f && echo true),true)
 HAVE_FFTW3F = true
 else
 $(warning fftw3f dependency not installed/available)
@@ -199,7 +197,7 @@ endif
 # --------------------------------------------------------------
 # Individual targets
 
-cardinal: carla deps dgl plugins
+cardinal: carla deps dgl plugins resources
 	$(MAKE) all -C src $(CARLA_EXTRA_ARGS)
 
 carla:
@@ -229,7 +227,7 @@ endif
 plugins: deps
 	$(MAKE) all -C plugins
 
-resources: cardinal
+resources:
 	$(MAKE) resources -C plugins
 
 ifneq ($(CROSS_COMPILING),true)

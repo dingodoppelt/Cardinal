@@ -50,11 +50,15 @@
 #include <patch.hpp>
 #include <library.hpp>
 
+#include "../CardinalCommon.hpp"
+
 #ifdef HAVE_LIBLO
 # include <lo/lo.h>
 #endif
 
-#include "../CardinalCommon.hpp"
+#ifdef DISTRHO_OS_WASM
+# include "DistrhoStandaloneUtils.hpp"
+#endif
 
 namespace rack {
 namespace asset {
@@ -110,10 +114,16 @@ struct FileButton : MenuButton {
 		menu->cornerFlags = BND_CORNER_TOP;
 		menu->box.pos = getAbsoluteOffset(math::Vec(0, box.size.y));
 
-		menu->addChild(createMenuItem("New", RACK_MOD_CTRL_NAME "+N", []() {
+#ifndef DISTRHO_OS_WASM
+		const char* const NewShortcut = RACK_MOD_CTRL_NAME "+N";
+#else
+		const char* const NewShortcut = "";
+#endif
+		menu->addChild(createMenuItem("New", NewShortcut, []() {
 			patchUtils::loadTemplateDialog();
 		}));
 
+#ifndef DISTRHO_OS_WASM
 		menu->addChild(createMenuItem("Open / Import...", RACK_MOD_CTRL_NAME "+O", []() {
 			patchUtils::loadDialog();
 		}));
@@ -126,6 +136,23 @@ struct FileButton : MenuButton {
 		menu->addChild(createMenuItem("Save as / Export...", RACK_MOD_CTRL_NAME "+Shift+S", []() {
 			patchUtils::saveAsDialog();
 		}));
+#else
+		menu->addChild(createMenuItem("Import patch...", RACK_MOD_CTRL_NAME "+O", []() {
+			patchUtils::loadDialog();
+		}));
+
+		menu->addChild(createMenuItem("Import selection...", "", [=]() {
+			patchUtils::loadSelectionDialog();
+		}, false, true));
+
+		menu->addChild(createMenuItem("Save and download compressed", RACK_MOD_CTRL_NAME "+Shift+S", []() {
+			patchUtils::saveAsDialog();
+		}));
+
+		menu->addChild(createMenuItem("Save and download uncompressed", "", []() {
+			patchUtils::saveAsDialogUncompressed();
+		}));
+#endif
 
 		menu->addChild(createMenuItem("Revert", RACK_MOD_CTRL_NAME "+" RACK_MOD_SHIFT_NAME "+O", []() {
 			patchUtils::revertDialog();
@@ -151,16 +178,18 @@ struct FileButton : MenuButton {
 		}
 #endif
 
+#ifndef DISTRHO_OS_WASM
 		menu->addChild(new ui::MenuSeparator);
 
 		// Load selection
-		menu->addChild(createMenuItem("Import selection", "", [=]() {
+		menu->addChild(createMenuItem("Import selection...", "", [=]() {
 			patchUtils::loadSelectionDialog();
 		}, false, true));
 
 		menu->addChild(createMenuItem("Export uncompressed json...", "", []() {
 			patchUtils::saveAsDialogUncompressed();
 		}));
+#endif
 
 		if (!demoPatches.empty())
 		{
@@ -182,13 +211,15 @@ struct FileButton : MenuButton {
 			}));
 		}
 
+#ifndef DISTRHO_OS_WASM
 		if (isStandalone) {
 			menu->addChild(new ui::MenuSeparator);
 
 			menu->addChild(createMenuItem("Quit", RACK_MOD_CTRL_NAME "+Q", []() {
 				APP->window->close();
 			}));
-		};
+		}
+#endif
 	}
 };
 
@@ -467,6 +498,8 @@ struct ViewButton : MenuButton {
 		menu->cornerFlags = BND_CORNER_TOP;
 		menu->box.pos = getAbsoluteOffset(math::Vec(0, box.size.y));
 
+		menu->addChild(createMenuLabel("Appearance"));
+
 		menu->addChild(createBoolPtrMenuItem("Show tooltips", "", &settings::tooltips));
 
 		ZoomSlider* zoomSlider = new ZoomSlider;
@@ -490,8 +523,18 @@ struct ViewButton : MenuButton {
 		menu->addChild(haloBrightnessSlider);
 
 		menu->addChild(new ui::MenuSeparator);
+		menu->addChild(createMenuLabel("Module dragging"));
 
-		// menu->addChild(createBoolPtrMenuItem("Hide cursor while dragging", "", &settings::allowCursorLock));
+		menu->addChild(createBoolPtrMenuItem("Lock module positions", "", &settings::lockModules));
+
+		menu->addChild(createBoolPtrMenuItem("Auto-squeeze modules when dragging", "", &settings::squeezeModules));
+
+		menu->addChild(new ui::MenuSeparator);
+		menu->addChild(createMenuLabel("Parameters"));
+
+#ifdef DISTRHO_OS_WASM
+		menu->addChild(createBoolPtrMenuItem("Lock cursor while dragging", "", &settings::allowCursorLock));
+#endif
 
 		static const std::vector<std::string> knobModeLabels = {
 			"Linear",
@@ -515,11 +558,20 @@ struct ViewButton : MenuButton {
 		knobScrollSensitivitySlider->box.size.x = 250.0;
 		menu->addChild(knobScrollSensitivitySlider);
 
-		menu->addChild(createBoolPtrMenuItem("Lock module positions", "", &settings::lockModules));
+		menu->addChild(new ui::MenuSeparator);
+		menu->addChild(createMenuLabel("Window"));
+
+#ifdef DISTRHO_OS_WASM
+		const bool fullscreen = APP->window->isFullScreen();
+		std::string fullscreenText = "F11";
+		if (fullscreen)
+			fullscreenText += " " CHECKMARK_STRING;
+		menu->addChild(createMenuItem("Fullscreen", fullscreenText, [=]() {
+			APP->window->setFullScreen(!fullscreen);
+		}));
+#endif
 
 		menu->addChild(createBoolPtrMenuItem("Invert zoom", "", &settings::invertZoom));
-
-		menu->addChild(new ui::MenuSeparator);
 
 		static const std::vector<std::string> rateLimitLabels = {
 			"None",
@@ -556,6 +608,43 @@ struct EngineButton : MenuButton {
 		menu->addChild(createMenuItem("Performance meters", cpuMeterText, [=]() {
 			settings::cpuMeter ^= true;
 		}));
+
+#ifdef DISTRHO_OS_WASM
+		if (supportsAudioInput()) {
+			const bool enabled = isAudioInputEnabled();
+			std::string text = "Enable Audio Input";
+			if (enabled)
+				text += " " CHECKMARK_STRING;
+			menu->addChild(createMenuItem(text, "", [enabled]() {
+				if (!enabled)
+					requestAudioInput();
+			}));
+		}
+
+		if (supportsMIDI()) {
+			const bool enabled = isMIDIEnabled();
+			std::string text = "Enable MIDI";
+			if (enabled)
+				text += " " CHECKMARK_STRING;
+			menu->addChild(createMenuItem(text, "", [enabled]() {
+				if (!enabled)
+					requestMIDI();
+			}));
+		}
+
+		if (supportsBufferSizeChanges()) {
+			static const std::vector<uint32_t> bufferSizes = {256, 512, 1024, 2048, 4096, 8192, 16384};
+			const uint32_t currentBufferSize = getBufferSize();
+			menu->addChild(createSubmenuItem("Buffer Size", std::to_string(currentBufferSize), [=](ui::Menu* menu) {
+				for (uint32_t bufferSize : bufferSizes) {
+					menu->addChild(createCheckMenuItem(std::to_string(bufferSize), "",
+						[=]() {return currentBufferSize == bufferSize;},
+						[=]() {requestBufferSizeChange(bufferSize);}
+					));
+				}
+			}));
+		}
+#endif
 	}
 };
 
@@ -572,11 +661,11 @@ struct HelpButton : MenuButton {
 		menu->box.pos = getAbsoluteOffset(math::Vec(0, box.size.y));
 
 		menu->addChild(createMenuItem("Rack User manual", "F1", [=]() {
-			system::openBrowser("https://vcvrack.com/manual");
+			patchUtils::openBrowser("https://vcvrack.com/manual");
 		}));
 
 		menu->addChild(createMenuItem("Cardinal Project page", "", [=]() {
-			system::openBrowser("https://github.com/DISTRHO/Cardinal/");
+			patchUtils::openBrowser("https://github.com/DISTRHO/Cardinal/");
 		}));
 
 		menu->addChild(new ui::MenuSeparator);
@@ -634,7 +723,7 @@ struct MenuBar : widget::OpaqueWidget {
 
 	MenuBar(const bool isStandalone)
 		: widget::OpaqueWidget()
-    {
+	{
 		const float margin = 5;
 		box.size.y = BND_WIDGET_HEIGHT + 2 * margin;
 

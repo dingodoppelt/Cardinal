@@ -17,6 +17,31 @@
 
 #pragma once
 
-#define GHC_OS_DETECTED
-#define GHC_OS_LINUX
-#include_next <ghc/filesystem.hpp>
+#if defined(__i386__) || defined(__x86_64__)
+# include_next <pmmintrin.h>
+
+#elif defined(__EMSCRIPTEN__)
+# include_next <pmmintrin.h>
+
+static inline
+__m64 _mm_set1_pi16(short w)
+{
+    return __extension__ (__m64){ static_cast<float>(w), static_cast<float>(w) };
+}
+
+#else
+# include "../sse2neon/sse2neon.h"
+
+static inline
+void __builtin_ia32_pause()
+{
+    __asm__ __volatile__("isb\n");
+}
+
+static inline
+__m64 _mm_set1_pi16(short w)
+{
+    return vreinterpret_s64_s16(vdup_n_s16(w));
+}
+
+#endif
