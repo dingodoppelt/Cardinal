@@ -53,17 +53,13 @@
 #endif
 
 #if CARDINAL_VARIANT_FX
-# define CARDINAL_FACTORY_TEMPLATE_NAME "template-fx.vcv"
+# define CARDINAL_TEMPLATE_NAME "init/fx.vcv"
+#elif CARDINAL_VARIANT_NATIVE
+# define CARDINAL_TEMPLATE_NAME "init/native.vcv"
 #elif CARDINAL_VARIANT_SYNTH
-# define CARDINAL_FACTORY_TEMPLATE_NAME "template-synth.vcv"
+# define CARDINAL_TEMPLATE_NAME "init/synth.vcv"
 #else
-# define CARDINAL_FACTORY_TEMPLATE_NAME "template.vcv"
-#endif
-
-#ifdef DISTRHO_OS_WASM
-# define CARDINAL_TEMPLATE_NAME "template-wasm.vcv"
-#else
-# define CARDINAL_TEMPLATE_NAME CARDINAL_FACTORY_TEMPLATE_NAME
+# define CARDINAL_TEMPLATE_NAME "init/main.vcv"
 #endif
 
 static const constexpr uint kCardinalStateBaseCount = 3; // patch, screenshot, comment
@@ -78,16 +74,20 @@ static const constexpr uint kCardinalStateCount = kCardinalStateBaseCount;
 #endif
 
 namespace rack {
+namespace asset {
+std::string patchesPath();
+void destroy();
+}
 namespace engine {
-    void Engine_setAboutToClose(Engine*);
+void Engine_setAboutToClose(Engine*);
 }
 namespace plugin {
-    void initStaticPlugins();
-    void destroyStaticPlugins();
+void initStaticPlugins();
+void destroyStaticPlugins();
 }
 #ifndef HEADLESS
 namespace window {
-    void WindowInit(Window* window, DISTRHO_NAMESPACE::Plugin* plugin);
+void WindowInit(Window* window, DISTRHO_NAMESPACE::Plugin* plugin);
 }
 #endif
 }
@@ -104,6 +104,32 @@ bool d_isDiffHigherThanLimit(const T& v1, const T& v2, const T& limit)
 // -----------------------------------------------------------------------------------------------------------
 
 #ifdef DISTRHO_OS_WASM
+static char* getPatchFileEncodedInURL() {
+    return static_cast<char*>(EM_ASM_PTR({
+        var searchParams = new URLSearchParams(window.location.search);
+        var patch = searchParams.get('patch');
+        if (!patch)
+        return null;
+        var length = lengthBytesUTF8(patch) + 1;
+        var str = _malloc(length);
+        stringToUTF8(patch, str, length);
+        return str;
+    }));
+};
+
+static char* getPatchRemoteURL() {
+    return static_cast<char*>(EM_ASM_PTR({
+        var searchParams = new URLSearchParams(window.location.search);
+        var patch = searchParams.get('patchurl');
+        if (!patch)
+        return null;
+        var length = lengthBytesUTF8(patch) + 1;
+        var str = _malloc(length);
+        stringToUTF8(patch, str, length);
+        return str;
+    }));
+};
+
 static char* getPatchStorageSlug() {
     return static_cast<char*>(EM_ASM_PTR({
         var searchParams = new URLSearchParams(window.location.search);
@@ -183,26 +209,20 @@ struct Initializer
             {
                 if (const char* const resourcePath = getResourcePath(bundlePath))
                 {
-                    asset::bundlePath = system::join(resourcePath, "PluginManifests");
                     asset::systemDir = resourcePath;
-                    templatePath = system::join(asset::systemDir, CARDINAL_TEMPLATE_NAME);
-                    factoryTemplatePath = system::join(asset::systemDir, CARDINAL_FACTORY_TEMPLATE_NAME);
+                    asset::bundlePath = system::join(asset::systemDir, "PluginManifests");
                 }
             }
 
-            if (asset::systemDir.empty() || ! system::exists(asset::systemDir))
+            if (asset::systemDir.empty() || ! system::exists(asset::systemDir) || ! system::exists(asset::bundlePath))
             {
                #ifdef CARDINAL_PLUGIN_SOURCE_DIR
                 // Make system dir point to source code location as fallback
                 asset::systemDir = CARDINAL_PLUGIN_SOURCE_DIR DISTRHO_OS_SEP_STR "Rack";
+                asset::bundlePath.clear();
 
-                if (system::exists(system::join(asset::systemDir, "res")))
-                {
-                    templatePath = CARDINAL_PLUGIN_SOURCE_DIR DISTRHO_OS_SEP_STR CARDINAL_TEMPLATE_NAME;
-                    factoryTemplatePath = CARDINAL_PLUGIN_SOURCE_DIR DISTRHO_OS_SEP_STR CARDINAL_FACTORY_TEMPLATE_NAME;
-                }
                 // If source code dir does not exist use install target prefix as system dir
-                else
+                if (!system::exists(system::join(asset::systemDir, "res")))
                #endif
                 {
                    #if defined(DISTRHO_OS_WASM)
@@ -218,18 +238,19 @@ struct Initializer
                    #endif
 
                     asset::bundlePath = system::join(asset::systemDir, "PluginManifests");
-                    templatePath = system::join(asset::systemDir, CARDINAL_TEMPLATE_NAME);
-                    factoryTemplatePath = system::join(asset::systemDir, CARDINAL_FACTORY_TEMPLATE_NAME);
                 }
             }
 
             asset::userDir = asset::systemDir;
         }
 
+        const std::string patchesPath = asset::patchesPath();
        #ifdef DISTRHO_OS_WASM
-        if ((patchStorageSlug = getPatchStorageSlug()) != nullptr)
-            templatePath = CARDINAL_IMPORTED_TEMPLATE_FILENAME;
+        templatePath = system::join(patchesPath, CARDINAL_WASM_WELCOME_TEMPLATE_FILENAME);
+       #else
+        templatePath = system::join(patchesPath, CARDINAL_TEMPLATE_NAME);
        #endif
+        factoryTemplatePath = system::join(patchesPath, CARDINAL_TEMPLATE_NAME);
 
         // Log environment
         INFO("%s %s v%s", APP_NAME.c_str(), APP_EDITION.c_str(), APP_VERSION.c_str());
@@ -296,6 +317,9 @@ struct Initializer
 
         INFO("Destroying plugins");
         plugin::destroyStaticPlugins();
+
+        INFO("Destroying colourized assets");
+        asset::destroy();
 
         INFO("Destroying settings");
         settings::destroy();
@@ -608,11 +632,15 @@ public:
             context->window = new rack::window::Window;
 
        #ifdef DISTRHO_OS_WASM
-        if (rack::patchStorageSlug == nullptr)
+        if ((rack::patchStorageSlug = getPatchStorageSlug()) == nullptr &&
+            (rack::patchRemoteURL = getPatchRemoteURL()) == nullptr &&
+            (rack::patchFromURL = getPatchFileEncodedInURL()) == nullptr)
        #endif
         {
             context->patch->loadTemplate();
             context->scene->rackScroll->reset();
+            // swap to factory template after first load
+            context->patch->templatePath = context->patch->factoryTemplatePath;
         }
 
        #if defined(HAVE_LIBLO) && defined(HEADLESS)
@@ -684,12 +712,12 @@ protected:
 
     uint32_t getVersion() const override
     {
-        return d_version(0, 22, 7);
+        return d_version(0, 22, 8);
     }
 
     int64_t getUniqueId() const override
     {
-       #if CARDINAL_VARIANT_MAIN
+       #if CARDINAL_VARIANT_MAIN || CARDINAL_VARIANT_NATIVE
         return d_cconst('d', 'C', 'd', 'n');
        #elif CARDINAL_VARIANT_FX
         return d_cconst('d', 'C', 'n', 'F');
@@ -705,7 +733,7 @@ protected:
 
     void initAudioPort(const bool input, uint32_t index, AudioPort& port) override
     {
-       #if CARDINAL_VARIANT_FX || CARDINAL_VARIANT_SYNTH
+       #if CARDINAL_VARIANT_FX || CARDINAL_VARIANT_NATIVE || CARDINAL_VARIANT_SYNTH
         if (index < 2)
             port.groupId = kPortGroupStereo;
        #endif
@@ -1143,11 +1171,29 @@ protected:
 
         const std::vector<uint8_t> data(d_getChunkFromBase64String(value));
 
+        DISTRHO_SAFE_ASSERT_RETURN(data.size() >= 4,);
+
         const ScopedContext sc(this);
 
         rack::system::removeRecursively(fAutosavePath);
         rack::system::createDirectories(fAutosavePath);
-        rack::system::unarchiveToDirectory(data, fAutosavePath);
+
+        static constexpr const char zstdMagic[] = "\x28\xb5\x2f\xfd";
+
+        if (std::memcmp(data.data(), zstdMagic, sizeof(zstdMagic)) != 0)
+        {
+            FILE* const f = std::fopen(rack::system::join(fAutosavePath, "patch.json").c_str(), "w");
+            DISTRHO_SAFE_ASSERT_RETURN(f != nullptr,);
+
+            std::fwrite(data.data(), data.size(), 1, f);
+            std::fclose(f);
+        }
+        else
+        {
+            try {
+                rack::system::unarchiveToDirectory(data, fAutosavePath);
+            } DISTRHO_SAFE_EXCEPTION_RETURN("setState unarchiveToDirectory",);
+        }
 
         try {
             context->patch->loadAutosave();

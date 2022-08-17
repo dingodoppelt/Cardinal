@@ -35,6 +35,7 @@
 #include <context.hpp>
 #include <history.hpp>
 #include <patch.hpp>
+#include <settings.hpp>
 #include <string.hpp>
 #include <system.hpp>
 #include <app/Scene.hpp>
@@ -56,13 +57,9 @@
 # include <emscripten/emscripten.h>
 #endif
 
-const std::string CARDINAL_VERSION = "22.07";
+const std::string CARDINAL_VERSION = "22.08";
 
 namespace rack {
-
-namespace settings {
-int rateLimit = 0;
-}
 
 bool isStandalone()
 {
@@ -101,6 +98,8 @@ std::string getSpecialPath(const SpecialPath type)
 #endif
 
 #ifdef DISTRHO_OS_WASM
+char* patchFromURL = nullptr;
+char* patchRemoteURL = nullptr;
 char* patchStorageSlug = nullptr;
 #endif
 

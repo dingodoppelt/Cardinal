@@ -66,15 +66,12 @@ BUILD_CXX_FLAGS += -U_GLIBCXX_ASSERTIONS -Wp,-U_GLIBCXX_ASSERTIONS
 # --------------------------------------------------------------
 # override VCV arch.mk stuff so we can build more architectures
 
-ifeq ($(CPU_AARCH64),true)
-ARCH_NAME = aarch64
-MACHINE = x86_64-the-rack
+ifeq ($(CPU_ARM32),true)
+ARCH_NAME = arm
+MACHINE = i686-the-rack
 else ifeq ($(CPU_ARM64),true)
 ARCH_NAME = arm64
 MACHINE = x86_64-the-rack
-else ifeq ($(CPU_ARM),true)
-ARCH_NAME = arm
-MACHINE = i686-the-rack
 else ifeq ($(WASM),true)
 MACHINE = i686-wasm
 else
@@ -106,15 +103,17 @@ ENV += LDFLAGS='$(LINK_FLAGS)'
 SPACE =
 SPACE +=
 
-ifeq ($(WASM),true)
-CMAKE = emcmake cmake
-else
-CMAKE = cmake
-endif
-
+CMAKE  = cmake
 CMAKE += -DCMAKE_INSTALL_LIBDIR=lib
 CMAKE += -DCMAKE_INSTALL_PREFIX='$(DEP_PATH)'
 CMAKE += -DBUILD_SHARED_LIBS=OFF
+
+# make sure debug/release matches
+ifeq ($(DEBUG),true)
+CMAKE += -DCMAKE_BUILD_TYPE=Debug
+else
+CMAKE += -DCMAKE_BUILD_TYPE=Release
+endif
 
 # make sure macOS target matches ours
 ifeq ($(MACOS),true)
@@ -129,17 +128,28 @@ CMAKE += -DCMAKE_OSX_DEPLOYMENT_TARGET=$(MACOSX_DEPLOYMENT_TARGET)
 else ifeq ($(CIBUILD),true)
 $(error CI build requires -mmacosx-version-min flag on macOS)
 endif
+CMAKE += -DCMAKE_OSX_SYSROOT=$(shell xcrun --sdk macosx --show-sdk-path)
 endif
 
-ifeq ($(CROSS_COMPILING),true)
+# fix emar and emranlib usage
+ifeq ($(WASM),true)
+CMAKE_AR     = $(shell which $(AR))
+CMAKE_RANLIB = $(shell which $(RANLIB))
+CMAKE += -DCMAKE_AR=$(CMAKE_AR)
+CMAKE += -DCMAKE_C_COMPILER_AR=$(CMAKE_AR)
+CMAKE += -DCMAKE_CXX_COMPILER_AR=$(CMAKE_AR)
+CMAKE += -DCMAKE_RANLIB=$(CMAKE_RANLIB)
+CMAKE += -DCMAKE_C_COMPILER_RANLIB=$(CMAKE_RANLIB)
+CMAKE += -DCMAKE_CXX_COMPILER_RANLIB=$(CMAKE_RANLIB)
+ifeq ($(shell uname -s),Darwin)
 CMAKE += -DCMAKE_CROSSCOMPILING=ON
+CMAKE += -DCMAKE_SYSTEM_NAME=Generic
+endif
 endif
 
-# make sure debug/release matches
-ifeq ($(DEBUG),true)
-CMAKE += -DCMAKE_BUILD_TYPE=Debug
-else
-CMAKE += -DCMAKE_BUILD_TYPE=Release
+# fix cmake forcing SDK for us
+ifeq ($(MACOS),true)
+CMAKE += -DCMAKE_OSX_SYSROOT="macosx"
 endif
 
 # fix cross-compilation for windows
@@ -182,7 +192,7 @@ DEP_MAKE += VERBOSE=1
 
 ifeq ($(shell uname -s),Darwin)
 ifeq ($(CIBUILD),true)
-DEP_MAKE += SHA256SUM="shasum5.28 -a 256"
+DEP_MAKE += SHA256SUM="shasum5.30 -a 256"
 else
 DEP_MAKE += SHA256SUM="shasum5.30 -a 256"
 endif

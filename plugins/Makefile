@@ -292,6 +292,11 @@ PLUGIN_FILES += Fundamental/src/dr_wav.c
 # modules/types which are present in other plugins
 FUNDAMENTAL_CUSTOM = $(DRWAV)
 
+# --------------------------------------------------------------
+# ZamAudio (always enabled)
+
+PLUGIN_FILES += $(wildcard ZamAudio/src/*.cpp)
+
 ifneq ($(NOPLUGINS),true)
 # --------------------------------------------------------------
 # 21kHz
@@ -1042,10 +1047,7 @@ BASE_FLAGS += -ffat-lto-objects
 endif
 endif
 
-ifeq ($(BSD),true)
-BASE_FLAGS += -D'aligned_alloc_16(ptr)'='aligned_alloc(16,ptr)'
-BASE_FLAGS += -D'aligned_free_16(ptr)'='free(ptr)'
-else ifeq ($(WASM),true)
+ifeq ($(BSD)$(WASM),true)
 BASE_FLAGS += -D'aligned_alloc_16(ptr)'='aligned_alloc(16,ptr)'
 BASE_FLAGS += -D'aligned_free_16(ptr)'='free(ptr)'
 endif
@@ -1138,10 +1140,16 @@ clean:
 # --------------------------------------------------------------
 
 ifeq ($(NOPLUGINS),true)
-PLUGIN_LIST = Cardinal Fundamental
+PLUGIN_LIST = Cardinal Fundamental ZamAudio
+
+RESOURCE_FILES = \
+		$(wildcard Cardinal/res/*.svg) \
+		$(wildcard Fundamental/res/*.svg) \
+		$(wildcard Fundamental/res/components/*.svg) \
+		$(wildcard ZamAudio/res/*.svg) \
+		Fundamental/presets
 else
 PLUGIN_LIST = $(subst /plugin.json,,$(wildcard */plugin.json))
-endif
 
 UNWANTED_FILES  = HetrickCV/res/illustrator - deprecated/MyModule.svg
 UNWANTED_FILES += $(wildcard Meander/res/*)
@@ -1168,7 +1176,6 @@ RESOURCE_FILES += BaconPlugs/res/Keypunch029.json
 RESOURCE_FILES += BaconPlugs/res/midi/chopin
 RESOURCE_FILES += BaconPlugs/res/midi/debussy
 RESOURCE_FILES += BaconPlugs/res/midi/goldberg
-RESOURCE_FILES += Cardinal/res/Miku/Miku.png
 RESOURCE_FILES += cf/playeroscs
 RESOURCE_FILES += DrumKit/res/samples
 RESOURCE_FILES += MindMeldModular/res/ShapeMaster/CommunityPresets
@@ -1183,14 +1190,26 @@ RESOURCE_FILES += $(wildcard unless_modules/art/*.art)
 RESOURCE_FILES += $(wildcard unless_modules/art/svg/*/*.svg)
 RESOURCE_FILES += $(wildcard unless_modules/font/*.ttf)
 # RESOURCE_FILES += $(wildcard unless_modules/manual/*)
+endif
 
-# MOD builds only have LV2 FX variant for now
+RESOURCE_FILES += Cardinal/res/Miku/Miku.png
+
+# MOD builds only have LV2 main and FX variant
 ifeq ($(MOD_BUILD),true)
+
 LV2_RESOURCES  = $(PLUGIN_LIST:%=../bin/Cardinal.lv2/resources/PluginManifests/%.json)
 LV2_RESOURCES += $(PLUGIN_LIST:%=../bin/CardinalFX.lv2/resources/PluginManifests/%.json)
 LV2_RESOURCES += $(RESOURCE_FILES:%=../bin/Cardinal.lv2/resources/%)
 LV2_RESOURCES += $(RESOURCE_FILES:%=../bin/CardinalFX.lv2/resources/%)
+
+# MOD builds only have LV2 FX variant for now
+else ifeq ($(WASM),true)
+
+LV2_RESOURCES  = $(PLUGIN_LIST:%=../bin/CardinalNative.lv2/resources/PluginManifests/%.json)
+LV2_RESOURCES += $(RESOURCE_FILES:%=../bin/CardinalNative.lv2/resources/%)
+
 else
+
 LV2_RESOURCES  = $(PLUGIN_LIST:%=../bin/Cardinal.lv2/resources/PluginManifests/%.json)
 LV2_RESOURCES += $(PLUGIN_LIST:%=../bin/CardinalFX.lv2/resources/PluginManifests/%.json)
 LV2_RESOURCES += $(PLUGIN_LIST:%=../bin/CardinalSynth.lv2/resources/PluginManifests/%.json)
@@ -1214,6 +1233,7 @@ VST3_RESOURCES += $(PLUGIN_LIST:%=../bin/CardinalSynth.vst3/Contents/Resources/P
 VST3_RESOURCES += $(RESOURCE_FILES:%=../bin/Cardinal.vst3/Contents/Resources/%)
 VST3_RESOURCES += $(RESOURCE_FILES:%=../bin/CardinalFX.vst3/Contents/Resources/%)
 VST3_RESOURCES += $(RESOURCE_FILES:%=../bin/CardinalSynth.vst3/Contents/Resources/%)
+
 endif
 
 resources: $(LV2_RESOURCES) $(VST2_RESOURCES) $(VST3_RESOURCES)
@@ -1223,6 +1243,10 @@ resources: $(LV2_RESOURCES) $(VST2_RESOURCES) $(VST3_RESOURCES)
 	$(SILENT)ln -sf $(abspath $<) $@
 
 ../bin/CardinalFX.lv2/resources/%: %
+	-@mkdir -p "$(shell dirname $@)"
+	$(SILENT)ln -sf $(abspath $<) $@
+
+../bin/CardinalNative.lv2/resources/%: %
 	-@mkdir -p "$(shell dirname $@)"
 	$(SILENT)ln -sf $(abspath $<) $@
 
@@ -1241,6 +1265,10 @@ endif
 	$(SILENT)ln -sf $(abspath $<) $@
 
 ../bin/CardinalFX.lv2/resources/PluginManifests/%.json: %/plugin.json
+	-@mkdir -p "$(shell dirname $@)"
+	$(SILENT)ln -sf $(abspath $<) $@
+
+../bin/CardinalNative.lv2/resources/PluginManifests/%.json: %/plugin.json
 	-@mkdir -p "$(shell dirname $@)"
 	$(SILENT)ln -sf $(abspath $<) $@
 
@@ -1924,6 +1952,13 @@ $(BUILD_DIR)/WhatTheRack/%.cpp.o: WhatTheRack/%.cpp
 	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -c -o $@ \
 		$(foreach m,$(WHATTHERACK_CUSTOM),$(call custom_module_names,$(m),WhatTheRack)) \
 		-DpluginInstance=pluginInstance__WhatTheRack
+
+$(BUILD_DIR)/ZamAudio/%.cpp.o: ZamAudio/%.cpp
+	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
+	@echo "Compiling $<"
+	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -c -o $@ \
+		$(foreach m,$(ZAMAUDIO_CUSTOM),$(call custom_module_names,$(m),ZamAudio)) \
+		-DpluginInstance=pluginInstance__ZamAudio
 
 $(BUILD_DIR)/ZetaCarinaeModules/%.cpp.o: ZetaCarinaeModules/%.cpp
 	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"

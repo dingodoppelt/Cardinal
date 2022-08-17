@@ -1227,7 +1227,7 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Runner {
 
             if (! info->valid)
                 break;
-            if (info->audioIns != 0 && info->audioIns != 2)
+            if (info->audioIns > 2)
                 break;
             if (info->midiIns != 0 && info->midiIns != 1)
                 break;
@@ -1424,7 +1424,8 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Runner {
                 if (param.readonly)
                 {
                     ImGui::BeginDisabled();
-                    ImGui::SliderFloat(param.name, &ui->values[i], param.min, param.max, param.printformat, ImGuiSliderFlags_NoInput);
+                    ImGui::SliderFloat(param.name, &ui->values[i], param.min, param.max, param.printformat,
+                                       ImGuiSliderFlags_NoInput | (param.log ? ImGuiSliderFlags_Logarithmic : 0x0));
                     ImGui::EndDisabled();
                     continue;
                 }
@@ -1447,7 +1448,7 @@ struct IldaeilWidget : ImGuiWidget, IdleCallback, Runner {
                 else
                 {
                     const bool ret = param.log
-                                   ? ImGui::SliderFloat(param.name, &ui->values[i], param.min, param.max, param.printformat, 2.0f)
+                                   ? ImGui::SliderFloat(param.name, &ui->values[i], param.min, param.max, param.printformat, ImGuiSliderFlags_Logarithmic)
                                    : ImGui::SliderFloat(param.name, &ui->values[i], param.min, param.max, param.printformat);
                     if (ret)
                     {
@@ -1750,8 +1751,8 @@ struct IldaeilModuleWidget : ModuleWidgetWithSideScrews<26> {
         if (module == nullptr || module->pcontext != nullptr)
         {
             ildaeilWidget = new IldaeilWidget(module);
-            ildaeilWidget->box.pos = Vec(3 * RACK_GRID_WIDTH, 0);
-            ildaeilWidget->box.size = Vec(box.size.x - 6 * RACK_GRID_WIDTH, box.size.y);
+            ildaeilWidget->box.pos = Vec(3 * RACK_GRID_WIDTH + 1, 1);
+            ildaeilWidget->box.size = Vec(box.size.x - 6 * RACK_GRID_WIDTH - 2, box.size.y - 2);
             addChild(ildaeilWidget);
         }
 

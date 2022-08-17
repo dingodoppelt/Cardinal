@@ -40,6 +40,7 @@
 #include <ui/ProgressBar.hpp>
 #include <ui/Label.hpp>
 #include <engine/Engine.hpp>
+#include <widget/FramebufferWidget.hpp>
 #include <window/Window.hpp>
 #include <asset.hpp>
 #include <context.hpp>
@@ -51,18 +52,21 @@
 #include <library.hpp>
 
 #include "../CardinalCommon.hpp"
+#include "DistrhoStandaloneUtils.hpp"
 
 #ifdef HAVE_LIBLO
 # include <lo/lo.h>
 #endif
 
-#ifdef DISTRHO_OS_WASM
-# include "DistrhoStandaloneUtils.hpp"
-#endif
+void switchDarkMode(bool darkMode);
 
 namespace rack {
 namespace asset {
 std::string patchesPath();
+}
+
+namespace plugin {
+void updateStaticPluginsDarkMode();
 }
 
 namespace app {
@@ -93,12 +97,15 @@ struct MenuButton : ui::Button {
 
 struct FileButton : MenuButton {
 	const bool isStandalone;
+#if !(defined(DISTRHO_OS_WASM) && defined(STATIC_BUILD))
 	std::vector<std::string> demoPatches;
+#endif
 
 	FileButton(const bool standalone)
 		: MenuButton(),  isStandalone(standalone)
 	{
-		const std::string patchesDir = asset::patchesPath();
+#if !(defined(DISTRHO_OS_WASM) && defined(STATIC_BUILD))
+		const std::string patchesDir = asset::patchesPath() + DISTRHO_OS_SEP_STR "examples";
 
 		if (system::isDirectory(patchesDir))
 		{
@@ -107,6 +114,7 @@ struct FileButton : MenuButton {
 				return string::lowercase(a) < string::lowercase(b);
 			});
 		}
+#endif
 	}
 
 	void onAction(const ActionEvent& e) override {
@@ -191,6 +199,7 @@ struct FileButton : MenuButton {
 		}));
 #endif
 
+#if !(defined(DISTRHO_OS_WASM) && defined(STATIC_BUILD))
 		if (!demoPatches.empty())
 		{
 			menu->addChild(new ui::MenuSeparator);
@@ -208,8 +217,15 @@ struct FileButton : MenuButton {
 						patchUtils::loadPathDialog(path, true);
 					}));
 				}
+
+				menu->addChild(new ui::MenuSeparator);
+
+				menu->addChild(createMenuItem("Open PatchStorage.com for more patches", "", []() {
+					patchUtils::openBrowser("https://patchstorage.com/platform/cardinal/");
+				}));
 			}));
 		}
+#endif
 
 #ifndef DISTRHO_OS_WASM
 		if (isStandalone) {
@@ -492,6 +508,20 @@ struct KnobScrollSensitivitySlider : ui::Slider {
 };
 
 
+static void setAllFramebufferWidgetsDirty(widget::Widget* const widget)
+{
+	for (widget::Widget* child : widget->children)
+	{
+		if (widget::FramebufferWidget* const fbw = dynamic_cast<widget::FramebufferWidget*>(child))
+		{
+			fbw->setDirty();
+			break;
+		}
+		setAllFramebufferWidgetsDirty(child);
+	}
+}
+
+
 struct ViewButton : MenuButton {
 	void onAction(const ActionEvent& e) override {
 		ui::Menu* menu = createMenu();
@@ -499,6 +529,15 @@ struct ViewButton : MenuButton {
 		menu->box.pos = getAbsoluteOffset(math::Vec(0, box.size.y));
 
 		menu->addChild(createMenuLabel("Appearance"));
+
+		std::string darkModeText;
+		if (settings::darkMode)
+			darkModeText = CHECKMARK_STRING;
+		menu->addChild(createMenuItem("Dark Mode", darkModeText, []() {
+			switchDarkMode(!settings::darkMode);
+			plugin::updateStaticPluginsDarkMode();
+			setAllFramebufferWidgetsDirty(APP->scene);
+		}));
 
 		menu->addChild(createBoolPtrMenuItem("Show tooltips", "", &settings::tooltips));
 
@@ -563,10 +602,10 @@ struct ViewButton : MenuButton {
 
 #ifdef DISTRHO_OS_WASM
 		const bool fullscreen = APP->window->isFullScreen();
-		std::string fullscreenText = "F11";
+		std::string rightText = "F11";
 		if (fullscreen)
-			fullscreenText += " " CHECKMARK_STRING;
-		menu->addChild(createMenuItem("Fullscreen", fullscreenText, [=]() {
+			rightText += " " CHECKMARK_STRING;
+		menu->addChild(createMenuItem("Fullscreen", rightText, [=]() {
 			APP->window->setFullScreen(!fullscreen);
 		}));
 #endif
@@ -609,42 +648,40 @@ struct EngineButton : MenuButton {
 			settings::cpuMeter ^= true;
 		}));
 
-#ifdef DISTRHO_OS_WASM
-		if (supportsAudioInput()) {
-			const bool enabled = isAudioInputEnabled();
-			std::string text = "Enable Audio Input";
-			if (enabled)
-				text += " " CHECKMARK_STRING;
-			menu->addChild(createMenuItem(text, "", [enabled]() {
-				if (!enabled)
-					requestAudioInput();
-			}));
-		}
+		if (isUsingNativeAudio()) {
+			if (supportsAudioInput()) {
+				const bool enabled = isAudioInputEnabled();
+				std::string rightText;
+				if (enabled)
+					rightText = CHECKMARK_STRING;
+				menu->addChild(createMenuItem("Enable Audio Input", rightText, [enabled]() {
+					if (!enabled)
+						requestAudioInput();
+				}));
+			}
 
-		if (supportsMIDI()) {
-			const bool enabled = isMIDIEnabled();
-			std::string text = "Enable MIDI";
-			if (enabled)
-				text += " " CHECKMARK_STRING;
-			menu->addChild(createMenuItem(text, "", [enabled]() {
-				if (!enabled)
+			if (supportsMIDI()) {
+				std::string rightText;
+				if (isMIDIEnabled())
+					rightText = CHECKMARK_STRING;
+				menu->addChild(createMenuItem("Enable/Reconnect MIDI", rightText, []() {
 					requestMIDI();
-			}));
-		}
+				}));
+			}
 
-		if (supportsBufferSizeChanges()) {
-			static const std::vector<uint32_t> bufferSizes = {256, 512, 1024, 2048, 4096, 8192, 16384};
-			const uint32_t currentBufferSize = getBufferSize();
-			menu->addChild(createSubmenuItem("Buffer Size", std::to_string(currentBufferSize), [=](ui::Menu* menu) {
-				for (uint32_t bufferSize : bufferSizes) {
-					menu->addChild(createCheckMenuItem(std::to_string(bufferSize), "",
-						[=]() {return currentBufferSize == bufferSize;},
-						[=]() {requestBufferSizeChange(bufferSize);}
-					));
-				}
-			}));
+			if (supportsBufferSizeChanges()) {
+				static const std::vector<uint32_t> bufferSizes = {256, 512, 1024, 2048, 4096, 8192, 16384};
+				const uint32_t currentBufferSize = getBufferSize();
+				menu->addChild(createSubmenuItem("Buffer Size", std::to_string(currentBufferSize), [=](ui::Menu* menu) {
+					for (uint32_t bufferSize : bufferSizes) {
+						menu->addChild(createCheckMenuItem(std::to_string(bufferSize), "",
+							[=]() {return currentBufferSize == bufferSize;},
+							[=]() {requestBufferSizeChange(bufferSize);}
+						));
+					}
+				}));
+			}
 		}
-#endif
 	}
 };
 

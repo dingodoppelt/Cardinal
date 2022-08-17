@@ -1,6 +1,5 @@
 {
-  "version": "2.1.1",
-  "unsaved": true,
+  "version": "2.1.2",
   "zoom": 1.0,
   "modules": [
     {
@@ -9,15 +8,15 @@
       "model": "TextEditor",
       "version": "2.0",
       "params": [],
-      "leftModuleId": 1202678850202654,
+      "leftModuleId": 799138358763949,
       "data": {
         "filepath": "",
         "lang": "None",
-        "etext": "Welcome to Cardinal!\n\nThis is the Synth variant\nIt has 2 audio outputs, plus MIDI\n\nA basic VCO + ADSR + VCA is\nthe default patch\n\n",
-        "width": 19
+        "etext": "Welcome to Cardinal!\n\nThis is the Native Audio/MIDI variant.\nIt has 2 audio outputs, enabled by default.\nUse Engine menu to enable input and/or MIDI.\n\nA basic VCO + ADSR + VCA is the default patch\n\n",
+        "width": 23
       },
       "pos": [
-        58,
+        49,
         0
       ]
     },
@@ -151,7 +150,7 @@
         }
       ],
       "leftModuleId": 4828178296911509,
-      "rightModuleId": 4,
+      "rightModuleId": 799138358763949,
       "data": {
         "dcFilter": true
       },
@@ -183,42 +182,26 @@
       ]
     },
     {
-      "id": 4,
+      "id": 799138358763949,
       "plugin": "Cardinal",
-      "model": "HostParameters",
+      "model": "HostMIDIMap",
       "version": "2.0",
       "params": [],
       "leftModuleId": 1,
-      "rightModuleId": 1202678850202654,
-      "data": {
-        "smooth": true
-      },
-      "pos": [
-        38,
-        0
-      ]
-    },
-    {
-      "id": 1202678850202654,
-      "plugin": "Cardinal",
-      "model": "HostParametersMap",
-      "version": "2.0",
-      "params": [],
-      "leftModuleId": 4,
       "rightModuleId": 8712245256622475,
       "data": {
         "maps": [
           {
-            "hostParamId": 255,
-            "inverted": false,
-            "smooth": true,
+            "cc": -1,
             "moduleId": -1,
             "paramId": 0
           }
-        ]
+        ],
+        "smooth": true,
+        "channel": 0
       },
       "pos": [
-        47,
+        38,
         0
       ]
     }
