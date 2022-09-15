@@ -712,7 +712,7 @@ protected:
 
     uint32_t getVersion() const override
     {
-        return d_version(0, 22, 8);
+        return d_version(0, 22, 9);
     }
 
     int64_t getUniqueId() const override
@@ -733,19 +733,48 @@ protected:
 
     void initAudioPort(const bool input, uint32_t index, AudioPort& port) override
     {
-       #if CARDINAL_VARIANT_FX || CARDINAL_VARIANT_NATIVE || CARDINAL_VARIANT_SYNTH
-        if (index < 2)
-            port.groupId = kPortGroupStereo;
-       #endif
-
-        if (index >= 8)
+       #if CARDINAL_VARIANT_MAIN
+        if (index < 8)
+        {
+            port.groupId = index / 2;
+        }
+        else
         {
             port.hints = kAudioPortIsCV | kCVPortHasPositiveUnipolarRange | kCVPortHasScaledRange;
             index -= 8;
         }
+       #elif CARDINAL_VARIANT_FX || CARDINAL_VARIANT_NATIVE || CARDINAL_VARIANT_SYNTH
+        if (index < 2)
+            port.groupId = kPortGroupStereo;
+       #endif
 
         CardinalBasePlugin::initAudioPort(input, index, port);
     }
+
+   #if CARDINAL_VARIANT_MAIN
+    void initPortGroup(const uint32_t index, PortGroup& portGroup) override
+    {
+        switch (index)
+        {
+        case 0:
+            portGroup.name = "Audio 1+2";
+            portGroup.symbol = "audio_1_and_2";
+            break;
+        case 1:
+            portGroup.name = "Audio 3+4";
+            portGroup.symbol = "audio_3_and_4";
+            break;
+        case 2:
+            portGroup.name = "Audio 5+6";
+            portGroup.symbol = "audio_5_and_6";
+            break;
+        case 3:
+            portGroup.name = "Audio 7+8";
+            portGroup.symbol = "audio_7_and_8";
+            break;
+        }
+    }
+   #endif
 
     void initParameter(const uint32_t index, Parameter& parameter) override
     {
@@ -1241,7 +1270,11 @@ protected:
         {
             const TimePosition& timePos(getTimePosition());
 
-            const bool reset = timePos.playing && (timePos.frame == 0 || d_isDiffHigherThanLimit(fNextExpectedFrame, timePos.frame, (uint64_t)2));
+            bool reset = timePos.playing && (timePos.frame == 0 || d_isDiffHigherThanLimit(fNextExpectedFrame, timePos.frame, (uint64_t)2));
+
+            // ignore hosts which cannot supply time frame position
+            if (context->playing == timePos.playing && timePos.frame == 0 && context->frame == 0)
+                reset = false;
 
             context->playing = timePos.playing;
             context->bbtValid = timePos.bbt.valid;

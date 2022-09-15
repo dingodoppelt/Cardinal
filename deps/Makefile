@@ -72,6 +72,9 @@ MACHINE = i686-the-rack
 else ifeq ($(CPU_ARM64),true)
 ARCH_NAME = arm64
 MACHINE = x86_64-the-rack
+else ifeq ($(CPU_RISCV64),true)
+ARCH_NAME = riscv64
+MACHINE = x86_64-the-rack
 else ifeq ($(WASM),true)
 MACHINE = i686-wasm
 else
@@ -120,7 +123,7 @@ ifeq ($(MACOS),true)
 ifneq (,$(findstring -arch$(SPACE),$(CXXFLAGS)))
 CMAKE += -DCMAKE_OSX_ARCHITECTURES='$(subst $(SPACE),;,$(subst -arch=,,$(filter -arch=%,$(subst -arch$(SPACE),-arch=,$(CXXFLAGS)))))'
 else ifeq ($(CIBUILD),true)
-$(error CI build requires -march flag on macOS)
+$(error CI build requires -arch flag on macOS)
 endif
 ifneq (,$(findstring -mmacosx-version-min=,$(CXXFLAGS)))
 export MACOSX_DEPLOYMENT_TARGET = $(subst -mmacosx-version-min=,,$(filter -mmacosx-version-min=%,$(CXXFLAGS)))
@@ -128,7 +131,7 @@ CMAKE += -DCMAKE_OSX_DEPLOYMENT_TARGET=$(MACOSX_DEPLOYMENT_TARGET)
 else ifeq ($(CIBUILD),true)
 $(error CI build requires -mmacosx-version-min flag on macOS)
 endif
-CMAKE += -DCMAKE_OSX_SYSROOT=$(shell xcrun --sdk macosx --show-sdk-path)
+CMAKE += -DCMAKE_OSX_SYSROOT="macosx"
 endif
 
 # fix emar and emranlib usage
@@ -145,11 +148,6 @@ ifeq ($(shell uname -s),Darwin)
 CMAKE += -DCMAKE_CROSSCOMPILING=ON
 CMAKE += -DCMAKE_SYSTEM_NAME=Generic
 endif
-endif
-
-# fix cmake forcing SDK for us
-ifeq ($(MACOS),true)
-CMAKE += -DCMAKE_OSX_SYSROOT="macosx"
 endif
 
 # fix cross-compilation for windows

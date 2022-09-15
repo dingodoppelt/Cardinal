@@ -26,8 +26,8 @@
 // Fundamental (always enabled)
 #include "Fundamental/src/plugin.hpp"
 
-// ZamAudio (always enabled)
-#include "ZamAudio/src/plugin.hpp"
+// ZamAudio (always enabled) - TODO
+// #include "ZamAudio/src/plugin.hpp"
 
 #ifndef NOPLUGINS
 // 21kHz
@@ -38,6 +38,13 @@
 
 // Aaron Static
 #include "AaronStatic/src/plugin.hpp"
+
+// Alef's Bits
+#define modelSteps modelalefsbitsSteps
+#define modelLogic modelalefsbitsLogic
+#include "alefsbits/src/plugin.hpp"
+#undef modelSteps
+#undef modelLogic
 
 // Algoritmarte
 #include "Algoritmarte/src/plugin.hpp"
@@ -309,6 +316,25 @@ extern Model* modelTestVCF;
 #include "ChowDSP/src/plugin.cpp"
 #undef init
 
+// dBiz
+#define DarkDefaultItem dBizDarkDefaultItem
+#define OrangeLight dBizOrangeLight
+#define darkPanelID dBizdarkPanelID
+#define lightPanelID dBizlightPanelID
+#define modelChord modeldBizChord
+#define modelDivider modeldBizDivider
+#define modelFourSeq modeldBizFourSeq
+#define modelVCA4 modeldBizVCA4
+#include "dBiz/src/plugin.hpp"
+#undef DarkDefaultItem
+#undef OrangeLight
+#undef darkPanelID
+#undef lightPanelID
+#undef modelChord
+#undef modelDivider
+#undef modelFourSeq
+#undef modelVCA4
+
 // DrumKit
 #include "DrumKit/src/DrumKit.hpp"
 void setupSamples();
@@ -341,6 +367,9 @@ void saveGtgPluginDefault(const char*, int) {}
 
 // GrandeModular
 #include "GrandeModular/src/plugin.hpp"
+
+// H4N4 Modules
+#include "h4n4-modules/src/plugin.hpp"
 
 // Hampton Harmonics
 #define modelArp modelHamptonHarmonicsArp
@@ -712,6 +741,7 @@ std::vector<Model*> hostTerminalModels;
 
 // stuff that reads config files, we dont want that
 int loadConsoleType() { return 0; }
+bool loadDarkAsDefault() { return 1; }
 int loadDirectOutMode() { return 0; }
 void saveConsoleType(int) {}
 void saveDarkAsDefault(bool) {}
@@ -721,11 +751,12 @@ void saveHighQualityAsDefault(bool) {}
 // plugin instances
 Plugin* pluginInstance__Cardinal;
 Plugin* pluginInstance__Fundamental;
-Plugin* pluginInstance__ZamAudio;
+// Plugin* pluginInstance__ZamAudio;
 #ifndef NOPLUGINS
 Plugin* pluginInstance__21kHz;
 Plugin* pluginInstance__8Mode;
 extern Plugin* pluginInstance__AaronStatic;
+Plugin* pluginInstance__alefsbits;
 Plugin* pluginInstance__Algoritmarte;
 Plugin* pluginInstance__AmalgamatedHarmonics;
 Plugin* pluginInstance__ArableInstruments;
@@ -742,6 +773,7 @@ Plugin* pluginInstance__BogaudioModules;
 Plugin* pluginInstance__CatroModulo;
 Plugin* pluginInstance__cf;
 Plugin* pluginInstance__ChowDSP;
+Plugin* pluginInstance__dBiz;
 extern Plugin* pluginInstance__DrumKit;
 Plugin* pluginInstance__ESeries;
 Plugin* pluginInstance__ExpertSleepersEncoders;
@@ -751,6 +783,7 @@ Plugin* pluginInstance__forsitan;
 Plugin* pluginInstance__GlueTheGiant;
 Plugin* pluginInstance__GoodSheperd;
 Plugin* pluginInstance__GrandeModular;
+Plugin* pluginInstance__H4N4;
 Plugin* pluginInstance__HamptonHarmonics;
 Plugin* pluginInstance__HetrickCV;
 extern Plugin* pluginInstance__ImpromptuModular;
@@ -994,6 +1027,7 @@ static void initStatic__Fundamental()
     }
 }
 
+/*
 static void initStatic__ZamAudio()
 {
     Plugin* const p = new Plugin;
@@ -1005,6 +1039,7 @@ static void initStatic__ZamAudio()
         p->addModel(modelZamComp);
     }
 }
+*/
 
 #ifndef NOPLUGINS
 static void initStatic__21kHz()
@@ -1045,6 +1080,33 @@ static void initStatic__AaronStatic()
         p->addModel(modelScaleCV);
         p->addModel(modelRandomNoteCV);
         p->addModel(modelDiatonicCV);
+    }
+}
+
+static void initStatic__alefsbits()
+{
+    Plugin* const p = new Plugin;
+    pluginInstance__alefsbits = p;
+
+    const StaticPluginLoader spl(p, "alefsbits");
+    if (spl.ok())
+    {
+#define modelSteps modelalefsbitsSteps
+#define modelLogic modelalefsbitsLogic
+        p->addModel(modelSimplexandhold);
+        p->addModel(modelBlank6hp);
+        p->addModel(modelPolyrand);
+        p->addModel(modelNoize);
+        p->addModel(modelSteps);
+        p->addModel(modelFibb);
+        p->addModel(modelOctsclr);
+        p->addModel(modelShift);
+        p->addModel(modelMlt);
+        p->addModel(modelMath);
+        p->addModel(modelLogic);
+        p->addModel(modelProbablynot);
+#undef modelSteps
+#undef modelLogic
     }
 }
 
@@ -1392,6 +1454,8 @@ static void initStatic__Bidoo()
         p->addModel(modelBORDL);
         p->addModel(modelZOUMAI);
         p->addModel(modelZOUMAIExpander);
+        p->addModel(modelENCORE);
+        p->addModel(modelENCOREExpander);
         p->addModel(modelMU);
         p->addModel(modelCHUTE);
         p->addModel(modelLOURDE);
@@ -1672,6 +1736,58 @@ static void initStatic__ChowDSP()
     }
 }
 
+static void initStatic__dBiz()
+{
+    Plugin* const p = new Plugin;
+    pluginInstance__dBiz = p;
+
+    const StaticPluginLoader spl(p, "dBiz");
+    if (spl.ok())
+    {
+#define modelChord modeldBizChord
+#define modelDivider modeldBizDivider
+#define modelFourSeq modeldBizFourSeq
+#define modelVCA4 modeldBizVCA4
+        p->addModel(modelNavControl);
+        p->addModel(modelBench);
+        p->addModel(modelContorno);
+        //p->addModel(modelContornoMK2);
+        p->addModel(modelTranspose);
+        p->addModel(modelUtility);
+        p->addModel(modelChord);
+        p->addModel(modelBene);
+        p->addModel(modelBenePads);
+        p->addModel(modelPerfMixer);
+        p->addModel(modelDrMix);
+        p->addModel(modelPerfMixer4);
+        p->addModel(modelVCA4);
+        p->addModel(modelVCA530);
+        p->addModel(modelRemix);
+        p->addModel(modelSmixer);
+        p->addModel(modelVerbo);
+        p->addModel(modelDVCO);
+        p->addModel(modelDAOSC);
+        p->addModel(modelTROSC);
+        p->addModel(modelTROSCMK2);
+        p->addModel(modelSuHa);
+        p->addModel(modelSuHaMK2);
+        p->addModel(modelFourSeq);
+        p->addModel(modelDivider);
+        p->addModel(modelUtil2);
+        p->addModel(modelSmorph);
+        p->addModel(modelBigSmorph);
+        p->addModel(modelSPan);
+        p->addModel(modelQuePasa);
+        p->addModel(modelDualFilter);
+        p->addModel(modelOrder);
+        p->addModel(modelDualMatrix);
+#undef modelChord
+#undef modelDivider
+#undef modelFourSeq
+#undef modelVCA4
+    }
+}
+
 static void initStatic__DrumKit()
 {
     Plugin* const p = new Plugin;
@@ -1857,6 +1973,18 @@ static void initStatic__GrandeModular()
         p->addModel(modelVarSampleDelays);
         p->addModel(modelVCA3);
         p->addModel(modelVCA4);
+    }
+}
+
+static void initStatic__H4N4()
+{
+    Plugin* const p = new Plugin;
+    pluginInstance__H4N4 = p;
+
+    const StaticPluginLoader spl(p, "h4n4-modules");
+    if (spl.ok())
+    {
+        p->addModel(modelXenQnt);
     }
 }
 
@@ -2470,6 +2598,7 @@ static void initStatic__PathSet()
         p->addModel(modelAstroVibe);
         p->addModel(modelGlassPane);
         p->addModel(modelNudge);
+        p->addModel(modelOneShot);
     }
 }
 
@@ -2662,18 +2791,16 @@ static void initStatic__Voxglitch()
       p->addModel(modelDigitalSequencerXP);
       p->addModel(modelGlitchSequencer);
       p->addModel(modelGhosts);
-      p->addModel(modelGoblins);
-      p->addModel(modelGrainEngine);
       p->addModel(modelGrainEngineMK2);
       p->addModel(modelGrainEngineMK2Expander);
       p->addModel(modelGrainFx);
+      p->addModel(modelGrooveBox);
+      p->addModel(modelGrooveBoxExpander);
       p->addModel(modelHazumi);
       p->addModel(modelLooper);
       p->addModel(modelRepeater);
       p->addModel(modelSamplerX8);
       p->addModel(modelSatanonaut);
-      p->addModel(modelGrooveBox);
-      p->addModel(modelGrooveBoxExpander);
       p->addModel(modelWavBank);
       p->addModel(modelWavBankMC);
       p->addModel(modelXY);
@@ -2741,11 +2868,12 @@ void initStaticPlugins()
 {
     initStatic__Cardinal();
     initStatic__Fundamental();
-    initStatic__ZamAudio();
+    // initStatic__ZamAudio();
 #ifndef NOPLUGINS
     initStatic__21kHz();
     initStatic__8Mode();
     initStatic__AaronStatic();
+    initStatic__alefsbits();
     initStatic__Algoritmarte();
     initStatic__AmalgamatedHarmonics();
     initStatic__AnimatedCircuits();
@@ -2762,6 +2890,7 @@ void initStaticPlugins()
     initStatic__CatroModulo();
     initStatic__cf();
     initStatic__ChowDSP();
+    initStatic__dBiz();
     initStatic__DrumKit();
     initStatic__ESeries();
     initStatic__ExpertSleepersEncoders();
@@ -2771,6 +2900,7 @@ void initStaticPlugins()
     initStatic__GlueTheGiant();
     initStatic__GoodSheperd();
     initStatic__GrandeModular();
+    initStatic__H4N4();
     initStatic__HamptonHarmonics();
     initStatic__HetrickCV();
     initStatic__ImpromptuModular();

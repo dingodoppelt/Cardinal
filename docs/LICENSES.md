@@ -16,6 +16,7 @@ Bellow follows a list of all code licenses used in Cardinal and linked submodule
 | 21kHz                   | MIT                      | |
 | 8Mode                   | BSD-3-Clause             | |
 | Aaron Static            | MIT                      | |
+| alef's bits             | GPL-3.0-or-later         | |
 | AlgoritmArte            | GPL-3.0-or-later         | |
 | Amalgamated Harmonics   | BSD-3-Clause             | |
 | Animated Circuits       | GPL-3.0-or-later         | |
@@ -32,6 +33,7 @@ Bellow follows a list of all code licenses used in Cardinal and linked submodule
 | Catro/Modulo            | BSD-3-Clause             | |
 | cf                      | BSD-3-Clause             | |
 | ChowDSP                 | GPL-3.0-or-later         | |
+| dBiz                    | GPL-3.0-or-later         | |
 | DrumKit                 | CC0-1.0                  | |
 | E-Series                | GPL-3.0-or-later         | |
 | ExpertSleepers Encoders | MIT                      | |
@@ -42,6 +44,7 @@ Bellow follows a list of all code licenses used in Cardinal and linked submodule
 | Glue the Giant          | GPL-3.0-or-later         | |
 | GoodSheperd             | GPL-3.0-or-later         | |
 | Grande                  | GPL-3.0-or-later         | |
+| H4N4 Modules            | GPL-3.0-or-later         | |
 | Hampton Harmonics       | MIT                      | |
 | HetrickCV               | CC0-1.0                  | |
 | ihtsyn                  | GPL-3.0-or-later         | |
@@ -98,6 +101,7 @@ Below is a list of artwork licenses from plugins
 | 8Mode                                   | BSD-3-Clause     | No artwork specific license provided |
 | AaronStatic/*                           | MIT              | No artwork specific license provided |
 | AaronStatic/fonts/PixelOperator.ttf     | CC0-1.0          | |
+| alefsbits/*                             | GPL-3.0-or-later | No artwork specific license provided |
 | Algoritmarte/*                          | GPL-3.0-or-later | No artwork specific license provided |
 | Algoritmarte/LEDSliderGreenHandle.svg   | CC-BY-NC-4.0     | |
 | AmalgamatedHarmonics/*                  | BSD-3-Clause     | No artwork specific license provided |
@@ -140,6 +144,9 @@ Below is a list of artwork licenses from plugins
 | cf/VT323-Regular.ttf                    | OFL-1.1-no-RFN   | |
 | ChowDSP/*                               | GPL-3.0-or-later | Same license as source code |
 | ChowDSP/fonts/RobotoCondensed-*.ttf     | Apache-2.0       | |
+| dBiz/*                                  | CC-BY-NC-ND-4.0  | |
+| dBiz/DejaVuSansMono.ttf                 | Bitstream-Vera   | |
+| dBiz/ShareTechMono-Regular.ttf          | OFL-1.1          | |
 | DrumKit/*                               | CC0-1.0          | |
 | DrumKit/component/NovaMono.ttf          | OFL-1.1-RFN      | |
 | E-Series/*                              | Custom           | Copyright © Synthesis Technology, [used and distributed with permission](LICENSE-PERMISSIONS.md#eseries-paul-schreiber--synthtech) |
@@ -152,6 +159,7 @@ Below is a list of artwork licenses from plugins
 | GlueTheGiant/fonts/DSEG7-*              | OFL-1.1-RFN      | |
 | GoodSheperd/*                           | GPL-3.0-or-later | No artwork specific license provided |
 | GrandeModular/*                         | CC-BY-NC-ND-4.0  | |
+| h4n4-modules/*                          | GPL-3.0-or-later | No artwork specific license provided |
 | HamptonHarmonics/*                      | MIT              | No artwork specific license provided |
 | HamptonHarmonics/PixelOperator.ttf      | CC0-1.0          | |
 | HetrickCV/*                             | CC0-1.0          | |

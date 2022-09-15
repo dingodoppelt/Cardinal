@@ -293,9 +293,9 @@ PLUGIN_FILES += Fundamental/src/dr_wav.c
 FUNDAMENTAL_CUSTOM = $(DRWAV)
 
 # --------------------------------------------------------------
-# ZamAudio (always enabled)
+# ZamAudio (always enabled) - TODO
 
-PLUGIN_FILES += $(wildcard ZamAudio/src/*.cpp)
+# PLUGIN_FILES += $(wildcard ZamAudio/src/*.cpp)
 
 ifneq ($(NOPLUGINS),true)
 # --------------------------------------------------------------
@@ -307,6 +307,14 @@ PLUGIN_FILES += $(filter-out 21kHz/src/21kHz.cpp,$(wildcard 21kHz/src/*.cpp))
 # 8Mode
 
 PLUGIN_FILES += $(filter-out 8Mode/src/8mode.cpp,$(wildcard 8Mode/src/*.cpp))
+
+# --------------------------------------------------------------
+# alefsbits
+
+PLUGIN_FILES += $(filter-out alefsbits/src/plugin.cpp,$(wildcard alefsbits/src/*.cpp))
+
+# modules/types which are present in other plugins
+ALEFSBITS_CUSTOM = Steps Logic
 
 # --------------------------------------------------------------
 # AlgoritmArte
@@ -525,7 +533,7 @@ PLUGIN_FILES += $(filter-out Bidoo/src/dep/resampler/main.cpp,$(wildcard Bidoo/s
 PLUGIN_FILES += BidooDark/plugin.cpp
 
 # modules/types which are present in other plugins
-BIDOO_CUSTOM = ChannelDisplay InstantiateExpanderItem LadderFilter $(DRWAV)
+BIDOO_CUSTOM = ChannelDisplay InstantiateExpanderItem LadderFilter PitchShifter $(DRWAV)
 BIDOO_CUSTOM_PER_FILE = channel channel filterType
 
 # --------------------------------------------------------------
@@ -546,6 +554,9 @@ PLUGIN_FILES += $(wildcard ChowDSP/src/*/*.cpp)
 PLUGIN_FILES += $(wildcard ChowDSP/src/*/*/*.cpp)
 PLUGIN_FILES += $(wildcard ChowDSP/lib/r8lib/*.cpp)
 
+# modules/types which are present in other plugins
+CHOWDSP_CUSTOM = sign
+
 # --------------------------------------------------------------
 # CatroModulo
 
@@ -561,6 +572,15 @@ PLUGIN_FILES += $(filter-out cf/src/plugin.cpp,$(wildcard cf/src/*.cpp))
 
 # modules/types which are present in other plugins
 CF_CUSTOM = $(DRWAV)
+
+# --------------------------------------------------------------
+# dBiz
+
+PLUGIN_FILES += $(filter-out dBiz/src/plugin.cpp,$(wildcard dBiz/src/*.cpp))
+
+# modules/types which are present in other plugins
+DBIZ_CUSTOM  = Chord DarkDefaultItem Divider FourSeq FourSeqWidget OrangeLight VCA4 Wavefolder darkPanelID lightPanelID
+DBIZ_CUSTOM_PER_FILE = LERP MultiFilter Oscillator calcOutput sineOsc subBank
 
 # --------------------------------------------------------------
 # DrumKit
@@ -617,6 +637,11 @@ PLUGIN_FILES += $(filter-out GoodSheperd/src/plugin.cpp,$(wildcard GoodSheperd/s
 # GrandeModular
 
 PLUGIN_FILES += $(filter-out GrandeModular/src/plugin.cpp,$(wildcard GrandeModular/src/*.cpp))
+
+# --------------------------------------------------------------
+# H4N4 Modules
+
+PLUGIN_FILES += $(filter-out h4n4-modules/src/plugin.cpp,$(wildcard h4n4-modules/src/*.cpp))
 
 # --------------------------------------------------------------
 # Hampton Harmonics
@@ -829,6 +854,9 @@ PARABLE_CUSTOM = Clouds CustomPanel CloudsWidget FreezeLight clouds stmlib
 
 PLUGIN_FILES += $(filter-out PathSet/src/plugin.cpp,$(wildcard PathSet/src/*.cpp))
 
+# modules/types which are present in other plugins
+PATHSET_CUSTOM = PitchShifter
+
 # --------------------------------------------------------------
 # PinkTrombone
 
@@ -877,7 +905,7 @@ PLUGIN_FILES += $(filter-out stocaudio/src/plugin.cpp,$(wildcard stocaudio/src/*
 PLUGIN_FILES += $(filter-out unless_modules/src/unless.cpp,$(wildcard unless_modules/src/*.cpp))
 
 # modules/types which are present in other plugins
-UNLESS_MODULES_CUSTOM = Selection
+UNLESS_MODULES_CUSTOM = Selection sign
 
 # --------------------------------------------------------------
 # ValleyAudio
@@ -961,7 +989,7 @@ VALLEYAUDIO_CUSTOM_PER_FILE = TempoKnob
 PLUGIN_FILES += $(filter-out voxglitch/src/plugin.cpp,$(wildcard voxglitch/src/*.cpp))
 
 # modules/types which are present in other plugins
-VOXGLITCH_CUSTOM = $(DRWAV) ADSR AudioFile Looper Readout
+VOXGLITCH_CUSTOM = ADSR AudioFile Looper Readout
 VOXGLITCH_CUSTOM_PER_FILE = AudioBuffer GateSequencer Grain SamplePlayer Sequencer SequencerDisplay VoltageSequencer
 
 # --------------------------------------------------------------
@@ -1081,7 +1109,7 @@ endif
 
 BUILD_C_FLAGS += -std=gnu11
 BUILD_C_FLAGS += -fno-finite-math-only -fno-strict-aliasing
-BUILD_CXX_FLAGS += -fno-finite-math-only -fno-strict-aliasing 
+BUILD_CXX_FLAGS += -fno-finite-math-only -fno-strict-aliasing
 
 ifneq ($(MACOS),true)
 BUILD_CXX_FLAGS += -faligned-new -Wno-abi
@@ -1089,6 +1117,9 @@ endif
 
 # Rack code is not tested for this flag, unset it
 BUILD_CXX_FLAGS += -U_GLIBCXX_ASSERTIONS -Wp,-U_GLIBCXX_ASSERTIONS
+
+# Ignore bad behaviour from Rack API
+BUILD_CXX_FLAGS += -Wno-format-security
 
 ifeq ($(WASM),true)
 BUILD_CXX_FLAGS += -fexceptions
@@ -1129,7 +1160,11 @@ endif
 # --------------------------------------------------------------
 # Build targets
 
+ifeq ($(NOPLUGINS),true)
+TARGET = noplugins.a
+else
 TARGET = plugins.a
+endif
 
 all: $(TARGET)
 
@@ -1222,9 +1257,15 @@ VST2_RESOURCES  = $(PLUGIN_LIST:%=../bin/CardinalFX.vst/Contents/Resources/Plugi
 VST2_RESOURCES += $(PLUGIN_LIST:%=../bin/CardinalSynth.vst/Contents/Resources/PluginManifests/%.json)
 VST2_RESOURCES += $(RESOURCE_FILES:%=../bin/CardinalFX.vst/Contents/Resources/%)
 VST2_RESOURCES += $(RESOURCE_FILES:%=../bin/CardinalSynth.vst/Contents/Resources/%)
+CLAP_RESOURCES  = $(PLUGIN_LIST:%=../bin/CardinalFX.clap/Contents/Resources/PluginManifests/%.json)
+CLAP_RESOURCES += $(PLUGIN_LIST:%=../bin/CardinalSynth.clap/Contents/Resources/PluginManifests/%.json)
+CLAP_RESOURCES += $(RESOURCE_FILES:%=../bin/CardinalFX.clap/Contents/Resources/%)
+CLAP_RESOURCES += $(RESOURCE_FILES:%=../bin/CardinalSynth.clap/Contents/Resources/%)
 else
 VST2_RESOURCES  = $(PLUGIN_LIST:%=../bin/Cardinal.vst/resources/PluginManifests/%.json)
 VST2_RESOURCES += $(RESOURCE_FILES:%=../bin/Cardinal.vst/resources/%)
+CLAP_RESOURCES  = $(PLUGIN_LIST:%=../bin/Cardinal.clap/resources/PluginManifests/%.json)
+CLAP_RESOURCES += $(RESOURCE_FILES:%=../bin/Cardinal.clap/resources/%)
 endif
 
 VST3_RESOURCES  = $(PLUGIN_LIST:%=../bin/Cardinal.vst3/Contents/Resources/PluginManifests/%.json)
@@ -1236,7 +1277,7 @@ VST3_RESOURCES += $(RESOURCE_FILES:%=../bin/CardinalSynth.vst3/Contents/Resource
 
 endif
 
-resources: $(LV2_RESOURCES) $(VST2_RESOURCES) $(VST3_RESOURCES)
+resources: $(LV2_RESOURCES) $(VST2_RESOURCES) $(VST3_RESOURCES) $(CLAP_RESOURCES)
 
 ../bin/Cardinal.lv2/resources/%: %
 	-@mkdir -p "$(shell dirname $@)"
@@ -1316,12 +1357,36 @@ ifeq ($(MACOS),true)
 ../bin/CardinalSynth.vst/Contents/Resources/PluginManifests/%.json: %/plugin.json
 	-@mkdir -p "$(shell dirname $@)"
 	$(SILENT)ln -sf $(abspath $<) $@
+
+../bin/CardinalFX.clap/Contents/Resources/%: %
+	-@mkdir -p "$(shell dirname $@)"
+	$(SILENT)ln -sf $(abspath $<) $@
+
+../bin/CardinalSynth.clap/Contents/Resources/%: %
+	-@mkdir -p "$(shell dirname $@)"
+	$(SILENT)ln -sf $(abspath $<) $@
+
+../bin/CardinalFX.clap/Contents/Resources/PluginManifests/%.json: %/plugin.json
+	-@mkdir -p "$(shell dirname $@)"
+	$(SILENT)ln -sf $(abspath $<) $@
+
+../bin/CardinalSynth.clap/Contents/Resources/PluginManifests/%.json: %/plugin.json
+	-@mkdir -p "$(shell dirname $@)"
+	$(SILENT)ln -sf $(abspath $<) $@
 else
 ../bin/Cardinal.vst/resources/%: %
 	-@mkdir -p "$(shell dirname $@)"
 	$(SILENT)ln -sf $(abspath $<) $@
 
 ../bin/Cardinal.vst/resources/PluginManifests/%.json: %/plugin.json
+	-@mkdir -p "$(shell dirname $@)"
+	$(SILENT)ln -sf $(abspath $<) $@
+
+../bin/Cardinal.clap/resources/%: %
+	-@mkdir -p "$(shell dirname $@)"
+	$(SILENT)ln -sf $(abspath $<) $@
+
+../bin/Cardinal.clap/resources/PluginManifests/%.json: %/plugin.json
 	-@mkdir -p "$(shell dirname $@)"
 	$(SILENT)ln -sf $(abspath $<) $@
 endif
@@ -1392,6 +1457,13 @@ $(BUILD_DIR)/AaronStatic/%.cpp.o: AaronStatic/%.cpp
 		-DpluginInstance=pluginInstance__AaronStatic \
 		-Dinit=init__AaronStatic
 
+$(BUILD_DIR)/alefsbits/%.cpp.o: alefsbits/%.cpp
+	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
+	@echo "Compiling $<"
+	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -c -o $@ \
+		$(foreach m,$(ALEFSBITS_CUSTOM),$(call custom_module_names,$(m),alefsbits)) \
+		-DpluginInstance=pluginInstance__alefsbits
+
 $(BUILD_DIR)/Algoritmarte/%.cpp.o: Algoritmarte/%.cpp
 	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
 	@echo "Compiling $<"
@@ -1459,7 +1531,6 @@ $(BUILD_DIR)/Autinn/%.cpp.o: Autinn/%.cpp
 		$(foreach m,$(AUTINN_CUSTOM),$(call custom_module_names,$(m),Autinn)) \
 		-DpluginInstance=pluginInstance__Autinn \
 		-Dinit=init__Autinn
-
 
 $(BUILD_DIR)/Axioma/%.cpp.o: Axioma/%.cpp
 	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
@@ -1551,6 +1622,15 @@ $(BUILD_DIR)/ChowDSP/%.cpp.o: ChowDSP/%.cpp
 		-IChowDSP/lib/chowdsp_utils/modules/chowdsp_dsp/WDF \
 		-Wno-deprecated-copy
 
+
+$(BUILD_DIR)/dBiz/src/%.cpp.o: dBiz/src/%.cpp
+	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
+	@echo "Compiling $<"
+	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -c -o $@ \
+		$(foreach m,$(DBIZ_CUSTOM),$(call custom_module_names,$(m),dBiz)) \
+		$(foreach m,$(DBIZ_CUSTOM_PER_FILE),$(call custom_per_file_names,$(m),dBiz_$(shell basename $*))) \
+		-DpluginInstance=pluginInstance__dBiz
+
 $(BUILD_DIR)/DrumKit/%.cpp.o: DrumKit/%.cpp
 	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
 	@echo "Compiling $<"
@@ -1592,7 +1672,7 @@ $(BUILD_DIR)/forsitan-modulare/%.cpp.o: forsitan-modulare/%.cpp
 	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
 	@echo "Compiling $<"
 	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -c -o $@ \
-		$(foreach m,$(GLUETHEGIANT_CUSTOM),$(call custom_module_names,$(m),forsitan)) \
+		$(foreach m,$(FORSITAN_CUSTOM),$(call custom_module_names,$(m),forsitan)) \
 		-DpluginInstance=pluginInstance__forsitan
 
 $(BUILD_DIR)/Fundamental/%.c.o: Fundamental/%.c
@@ -1641,6 +1721,13 @@ $(BUILD_DIR)/GrandeModular/%.cpp.o: GrandeModular/%.cpp
 		-Wno-missing-braces \
 		-Wno-narrowing \
 		-Wno-self-assign
+
+$(BUILD_DIR)/h4n4-modules/%.cpp.o: h4n4-modules/%.cpp
+	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
+	@echo "Compiling $<"
+	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -c -o $@ \
+		$(foreach m,$(H4N4_CUSTOM),$(call custom_module_names,$(m),H4N4)) \
+		-DpluginInstance=pluginInstance__H4N4
 
 $(BUILD_DIR)/HamptonHarmonics/%.cpp.o: HamptonHarmonics/%.cpp
 	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"

@@ -26,10 +26,11 @@
 #define CARDINAL_NUM_AUDIO_INPUTS  8
 #define CARDINAL_NUM_AUDIO_OUTPUTS 8
 
-#define DISTRHO_PLUGIN_BRAND "DISTRHO"
-#define DISTRHO_PLUGIN_NAME  "Cardinal"
-#define DISTRHO_PLUGIN_LABEL "Cardinal"
-#define DISTRHO_PLUGIN_URI   "https://distrho.kx.studio/plugins/cardinal"
+#define DISTRHO_PLUGIN_BRAND   "DISTRHO"
+#define DISTRHO_PLUGIN_NAME    "Cardinal"
+#define DISTRHO_PLUGIN_LABEL   "Cardinal"
+#define DISTRHO_PLUGIN_URI     "https://distrho.kx.studio/plugins/cardinal"
+#define DISTRHO_PLUGIN_CLAP_ID "studio.kx.distrho.cardinal"
 
 #ifdef HEADLESS
 #define DISTRHO_PLUGIN_HAS_UI             0
@@ -39,6 +40,8 @@
 #define DISTRHO_UI_FILE_BROWSER           1
 #define DISTRHO_UI_USE_NANOVG             1
 #define DISTRHO_UI_USER_RESIZABLE         1
+#define DISTRHO_UI_DEFAULT_WIDTH          1228
+#define DISTRHO_UI_DEFAULT_HEIGHT         666
 #endif
 #define DISTRHO_PLUGIN_IS_SYNTH           0
 #define DISTRHO_PLUGIN_NUM_INPUTS         CARDINAL_NUM_AUDIO_INPUTS + 10
