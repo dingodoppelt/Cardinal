@@ -8,7 +8,7 @@
 # jucewrapper/CMakeList.txt `project`
 # src/CardinalCommon.cpp `CARDINAL_VERSION`
 # src/CardinalPlugin.cpp `getVersion`
-VERSION = 22.09
+VERSION = 22.10
 
 # --------------------------------------------------------------
 # Import base definitions
@@ -269,6 +269,7 @@ install:
 	install -d $(DESTDIR)$(PREFIX)/lib/lv2/Cardinal.lv2
 	install -d $(DESTDIR)$(PREFIX)/lib/lv2/CardinalFX.lv2
 	install -d $(DESTDIR)$(PREFIX)/lib/lv2/CardinalSynth.lv2
+	install -d $(DESTDIR)$(PREFIX)/lib/clap/Cardinal.clap
 	install -d $(DESTDIR)$(PREFIX)/lib/vst/Cardinal.vst
 ifeq ($(VST3_SUPPORTED),true)
 	install -d $(DESTDIR)$(PREFIX)/lib/vst3/Cardinal.vst3/Contents
@@ -282,6 +283,7 @@ endif
 	install -m 644 bin/CardinalFX.lv2/*.*    $(DESTDIR)$(PREFIX)/lib/lv2/CardinalFX.lv2/
 	install -m 644 bin/CardinalSynth.lv2/*.* $(DESTDIR)$(PREFIX)/lib/lv2/CardinalSynth.lv2/
 
+	install -m 644 bin/Cardinal.clap/*.*     $(DESTDIR)$(PREFIX)/lib/clap/Cardinal.clap/
 	install -m 644 bin/Cardinal.vst/*.*      $(DESTDIR)$(PREFIX)/lib/vst/Cardinal.vst/
 
 ifeq ($(VST3_SUPPORTED),true)
