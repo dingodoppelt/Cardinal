@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - "r*"
-    branches:
-      - "NB_modules"
 
 env:
   CACHE_VERSION: 36
