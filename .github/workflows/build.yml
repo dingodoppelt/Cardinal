@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "r*"
+      - "build_*"
 
 env:
   CACHE_VERSION: 36
