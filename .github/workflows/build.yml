@@ -2,6 +2,8 @@ name: build
 
 on:
   push:
+    tags:
+      - 'build_*'
 
 env:
   CACHE_VERSION: 39
