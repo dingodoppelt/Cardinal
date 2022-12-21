@@ -818,6 +818,11 @@ MSM_CUSTOM = ADSR BlankPanel Delay LFO LowFrequencyOscillator Mult Noise OP VCA 
 PLUGIN_FILES += $(filter-out myth-modules/src/plugin.cpp,$(wildcard myth-modules/src/*.cpp))
 
 # --------------------------------------------------------------
+# NB
+
+PLUGIN_FILES += $(filter-out NB/src/plugin.cpp,$(wildcard NB/src/*.cpp))
+
+# --------------------------------------------------------------
 # Nonlinear Circuits
 
 PLUGIN_FILES += $(filter-out nonlinearcircuits/src/NLC.cpp,$(wildcard nonlinearcircuits/src/*.cpp))
@@ -2054,6 +2059,13 @@ $(BUILD_DIR)/myth-modules/%.cpp.o: myth-modules/%.cpp
 	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -c -o $@ \
 		$(foreach m,$(MYTH_MODULES_CUSTOM),$(call custom_module_names,$(m),myth_modules)) \
 		-DpluginInstance=pluginInstance__myth_modules
+
+$(BUILD_DIR)/NB/%.cpp.o: NB/%.cpp
+	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"
+	@echo "Compiling $<"
+	$(SILENT)$(CXX) $< $(BUILD_CXX_FLAGS) -c -o $@ \
+		$(foreach m,$(NB_CUSTOM),$(call custom_module_names,$(m),NB)) \
+		-DpluginInstance=pluginInstance__NB
 
 $(BUILD_DIR)/nonlinearcircuits/%.cpp.o: nonlinearcircuits/%.cpp
 	-@mkdir -p "$(shell dirname $(BUILD_DIR)/$<)"

@@ -230,3 +230,6 @@
 [submodule "plugins/Sapphire"]
 	path = plugins/Sapphire
 	url = https://github.com/cosinekitty/sapphire.git
+[submodule "plugins/NB"]
+	path = plugins/NB
+	url = https://github.com/dingodoppelt/NB.git

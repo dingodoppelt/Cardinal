@@ -673,6 +673,9 @@ extern Model* modelBlankPanel;
 // myth-modules
 #include "myth-modules/src/plugin.hpp"
 
+// NB
+#include "NB/src/plugin.hpp"
+
 // Nonlinear Circuits
 #include "nonlinearcircuits/src/NLC.hpp"
 
@@ -844,6 +847,7 @@ Plugin* pluginInstance__Mog;
 extern Plugin* pluginInstance__mscHack;
 Plugin* pluginInstance__MSM;
 Plugin* pluginInstance__myth_modules;
+Plugin* pluginInstance__NB;
 Plugin* pluginInstance__nonlinearcircuits;
 Plugin* pluginInstance__Orbits;
 Plugin* pluginInstance__ParableInstruments;
@@ -2561,6 +2565,24 @@ static void initStatic__myth_modules()
     }
 }
 
+static void initStatic__NB()
+{
+    Plugin* const p = new Plugin;
+    pluginInstance__NB = p;
+
+    const StaticPluginLoader spl(p, "NB");
+    if (spl.ok())
+    {
+        p->addModel(modelSimpleStereoEcho);
+        p->addModel(modelSimpleOSCvarSaw);
+        p->addModel(modelSoftclip);
+        p->addModel(modelVarShapeOSC);
+        p->addModel(modelMoggle);
+        p->addModel(modelPolyfotz);
+        p->addModel(modelVarTriSaw);
+    }
+}
+
 static void initStatic__nonlinearcircuits()
 {
     Plugin* const p = new Plugin;
@@ -3102,6 +3124,7 @@ void initStaticPlugins()
     initStatic__mscHack();
     initStatic__MSM();
     initStatic__myth_modules();
+    initStatic__NB();
     initStatic__nonlinearcircuits();
     initStatic__Orbits();
     initStatic__ParableInstruments();
