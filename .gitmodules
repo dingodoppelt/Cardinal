@@ -233,3 +233,6 @@
 [submodule "plugins/EnigmaCurry"]
 	path = plugins/EnigmaCurry
 	url = https://github.com/EnigmaCurry/EnigmaCurry-vcv-pack.git
+[submodule "plugins/NB"]
+	path = plugins/NB
+	url = https://github.com/dingodoppelt/NB.git
