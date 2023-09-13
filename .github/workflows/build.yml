@@ -20,7 +20,7 @@ jobs:
   linux:
     strategy:
       matrix:
-        target: [aarch64, armhf, i386, riscv64, x86_64]
+        target: [aarch64, armhf, x86_64]
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
@@ -141,38 +141,6 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            *.tar.gz
-
-  linux-x86_64-debug:
-    runs-on: ubuntu-20.04
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Set up dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -yqq libasound2-dev libdbus-1-dev libgl1-mesa-dev liblo-dev libsdl2-dev libx11-dev libxcursor-dev libxext-dev libxrandr-dev gperf meson
-          sudo apt-get clean
-      - name: Build linux x86_64 (debug)
-        env:
-          LDFLAGS: -static-libgcc -static-libstdc++
-        run: |
-          make features
-          # multiple jobs for building carla, deps and plugins
-          make DEBUG=true carla deps dgl plugins resources -j $(nproc)
-          # single job for final build stage, otherwise we might get killed due to OOM
-          make DEBUG=true HAVE_PULSEAUDIO=false clap lv2 vst2 vst3 -j 1
-      - name: Set sha8
-        id: slug
-        run: echo "SHA8=$(echo ${{ github.sha }} | cut -c1-8)" >> $GITHUB_ENV
-      - name: Pack binaries
-        run: |
-          tar -c -h --hard-dereference -z -f ${{ github.event.repository.name }}-linux-x86_64-debug-${{ github.event.pull_request.number || env.SHA8 }}.tar.gz -C bin $(ls bin | grep -e lv2 -e vst -e clap) ../LICENSE ../README.md ../docs
-      - uses: actions/upload-artifact@v3
-        with:
-          name: ${{ github.event.repository.name }}-linux-x86_64-debug-${{ github.event.pull_request.number || env.SHA8 }}
-          path: |
             *.tar.gz
 
   macos:
@@ -308,101 +276,6 @@ jobs:
           name: ${{ github.event.repository.name }}-${{ matrix.name }}-${{ github.event.pull_request.number || env.SHA8 }}
           path: |
             *.tar.gz
-
-  wasm:
-    strategy:
-      matrix:
-        target: [simd, nosimd]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Set up cache
-        id: cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/PawPawBuilds
-            src/Rack/dep/bin
-            src/Rack/dep/include
-            src/Rack/dep/lib
-            src/Rack/dep/share
-            src/Rack/dep/jansson-2.12
-            src/Rack/dep/libarchive-3.4.3
-            src/Rack/dep/libsamplerate-0.1.9
-            src/Rack/dep/zstd-1.4.5
-          key: wasm-${{ matrix.target }}-v${{ env.CACHE_VERSION }}
-      - name: Set up dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -yqq brotli gperf meson
-          sudo apt-get clean
-          [ -e ~/PawPawBuilds/emsdk ] || git clone https://github.com/emscripten-core/emsdk.git ~/PawPawBuilds/emsdk
-          cd ~/PawPawBuilds/emsdk && ./emsdk install ${{ env.EMSCRIPTEN_VERSION }} && ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
-      - name: Build extra dependencies
-        run: |
-          ${{ matrix.target == 'nosimd' }} && export PAWPAW_NOSIMD=1
-          source ~/PawPawBuilds/emsdk/emsdk_env.sh
-          ./deps/PawPaw/bootstrap-cardinal.sh wasm && ./deps/PawPaw/.cleanup.sh wasm
-      - name: Build wasm cross-compiled
-        if: steps.cache.outputs.cache-hit == 'true'
-        run: |
-          ${{ matrix.target == 'nosimd' }} && export PAWPAW_NOSIMD=1
-          source ~/PawPawBuilds/emsdk/emsdk_env.sh
-          source deps/PawPaw/local.env wasm
-          # FIXME send patch upstream, assuming this works..
-          sed -i -e 's/defined(__riscv)/defined(__riscv) || defined(__EMSCRIPTEN__)/' plugins/surgext/surge/src/common/globals.h
-          make features
-          make HAVE_LIBLO=false NOOPT=true NOSIMD=${{ matrix.target == 'nosimd' }} -j $(nproc)
-      - name: Build modgui
-        if: steps.cache.outputs.cache-hit == 'true'
-        run: |
-          ${{ matrix.target == 'nosimd' }} && export PAWPAW_NOSIMD=1
-          source ~/PawPawBuilds/emsdk/emsdk_env.sh
-          source deps/PawPaw/local.env wasm
-          make HAVE_LIBLO=false NOOPT=true NOSIMD=${{ matrix.target == 'nosimd' }} -j $(nproc) -C src/CardinalMiniSep modgui
-      - name: Make wasm versioned and compress
-        if: steps.cache.outputs.cache-hit == 'true'
-        run: |
-          ${{ matrix.target == 'nosimd' }} && export SUFFIX="-nosimd"
-          VERSION=$(cat Makefile | awk 'sub("VERSION = ","")')
-          cd bin
-          sed -i "s/CardinalMini\./CardinalMini-v${VERSION}\./g" *.html *.js
-          sed -i "s/CardinalNative\./CardinalNative-v${VERSION}\./g" *.html *.js
-          sed -i "s/CardinalMini-nosimd\./CardinalMini-nosimd-v${VERSION}\./g" *.html *.js
-          sed -i "s/CardinalNative-nosimd\./CardinalNative-nosimd-v${VERSION}\./g" *.html *.js
-          mv CardinalMini.data   CardinalMini${SUFFIX}-v${VERSION}.data
-          mv CardinalMini.js     CardinalMini${SUFFIX}-v${VERSION}.js
-          mv CardinalMini.wasm   CardinalMini${SUFFIX}-v${VERSION}.wasm
-          mv CardinalNative.data CardinalNative${SUFFIX}-v${VERSION}.data
-          mv CardinalNative.js   CardinalNative${SUFFIX}-v${VERSION}.js
-          mv CardinalNative.wasm CardinalNative${SUFFIX}-v${VERSION}.wasm
-          brotli -k -q 11 *.data *.html *.js *.wasm
-      - name: Set sha8 (non-release)
-        if: startsWith(github.ref, 'refs/tags/') != true
-        run: echo "SHA8=$(echo ${{ github.sha }} | cut -c1-8)" >> $GITHUB_ENV
-      - name: Set sha8 (release)
-        if: startsWith(github.ref, 'refs/tags/')
-        run: echo "SHA8=$(echo ${{ github.ref_name }})" >> $GITHUB_ENV
-      - name: Pack binaries
-        if: steps.cache.outputs.cache-hit == 'true'
-        run: |
-          cd bin; zip -r -9 ../${{ github.event.repository.name }}-wasm-${{ matrix.target }}-${{ github.event.pull_request.number || env.SHA8 }}.zip $(ls *.br *.html *.data *.js *.wasm) CardinalMini.lv2/modgui
-      - uses: actions/upload-artifact@v3
-        with:
-          name: ${{ github.event.repository.name }}-wasm-${{ matrix.target }}-${{ github.event.pull_request.number || env.SHA8 }}
-          path: |
-            *.zip
-      - uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          files: |
-            *.zip
 
   windows:
     strategy:
