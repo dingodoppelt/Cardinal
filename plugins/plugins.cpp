@@ -595,6 +595,7 @@ extern Model* modelArpeggiator;
 #undef modelComparator
 #include "MockbaModular/src/MockbaModular.hpp"
 #undef min
+#undef max
 #define saveBack ignoreMockbaModular1
 #define loadBack ignoreMockbaModular2
 #include "MockbaModular/src/MockbaModular.cpp"
@@ -2625,9 +2626,14 @@ static void initStatic__nonlinearcircuits()
         p->addModel(modelLetsSplosh);
         p->addModel(modelNeuron);
         p->addModel(modelNumberwang);
+        p->addModel(modelRouter);
         p->addModel(modelSegue);
+        p->addModel(modelSlothApathy);
+        p->addModel(modelSlothInertia);
+        p->addModel(modelSlothTorpor);
         p->addModel(modelSquidAxon);
         p->addModel(modelStatues);
+        p->addModel(modelTripleSloth);
     }
 }
 
@@ -2782,7 +2788,11 @@ static void initStatic__Sapphire()
     if (spl.ok())
     {
         p->addModel(modelElastika);
+        p->addModel(modelFrolic);
+        p->addModel(modelGlee);
         p->addModel(modelMoots);
+        p->addModel(modelTin);
+        p->addModel(modelTricorder);
         p->addModel(modelTubeUnit);
     }
 }
